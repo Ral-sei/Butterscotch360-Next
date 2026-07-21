@@ -13,7 +13,7 @@
 #define D3D9_VERTS_PER_QUAD 4
 #define D3D9_INDICES_PER_QUAD 6
 #define D3D9_VERTEX_STRIDE 28
-#define D3D9_MAX_SURFACES 16
+#define D3D9_MAX_SURFACES 64
 #define D3D9_TXTR_CACHE_BUDGET (240u * 1024u * 1024u)
 
 typedef struct {
@@ -76,11 +76,13 @@ typedef struct {
     uint32_t originalSpriteCount;
 
     // Surface data
-    void* surfaceTextures[D3D9_MAX_SURFACES];   // IDirect3DTexture9*
-    void* surfaceSurfaces[D3D9_MAX_SURFACES];   // IDirect3DSurface9*
+    void* surfaceTextures[D3D9_MAX_SURFACES];   // IDirect3DTexture9* resolved for sampling
+    void* surfaceSurfaces[D3D9_MAX_SURFACES];   // IDirect3DSurface9* render target
     int32_t surfaceWidths[D3D9_MAX_SURFACES];
     int32_t surfaceHeights[D3D9_MAX_SURFACES];
     bool surfaceActive[D3D9_MAX_SURFACES];
+    bool surfaceResolved[D3D9_MAX_SURFACES];
+    bool surfaceNeedsResolve[D3D9_MAX_SURFACES];
     int32_t currentSurfaceTarget;                // -1 = screen
 
     // GPU state (current values)
