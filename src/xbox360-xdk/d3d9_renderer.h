@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ * Derived from ceilingtilefan/Butterscotch-360 commit
+ * 7f8f1ea6044dbc55560dfbd2ca9a2f45e472c02e, with later work from
+ * flaf1x/Butterscotch360-Refresh and Ral-sei.
+ */
+
 #pragma once
 
 #include "renderer.h"
@@ -74,7 +81,6 @@ typedef struct {
     int32_t surfaceWidths[D3D9_MAX_SURFACES];
     int32_t surfaceHeights[D3D9_MAX_SURFACES];
     bool surfaceActive[D3D9_MAX_SURFACES];
-    void* savedRenderTarget;                     // IDirect3DSurface9*
     int32_t currentSurfaceTarget;                // -1 = screen
 
     // GPU state (current values)

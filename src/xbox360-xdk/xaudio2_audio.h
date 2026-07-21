@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ * Derived from ceilingtilefan/Butterscotch-360 commit
+ * 7f8f1ea6044dbc55560dfbd2ca9a2f45e472c02e, with later work from
+ * flaf1x/Butterscotch360-Refresh and Ral-sei.
+ */
+
 #pragma once
 
 #include "audio_system.h"
@@ -9,6 +16,7 @@
 
 typedef struct {
     bool active;
+    bool paused;
     bool loop;
     void* pVoice;           // IXAudio2SourceVoice*
     uint8_t* pcmData;       // fully decoded PCM
@@ -17,6 +25,8 @@ typedef struct {
     uint16_t channels;
     float volume;
     float pitch;
+    uint64_t voiceSampleBase;
+    uint32_t startFrame;
 } XdkStreamEntry;
 
 typedef struct {

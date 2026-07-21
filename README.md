@@ -252,3 +252,11 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4029e1e3176" />
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/3702a261-01fe-4b04-9e6c-b69336c2ce46" />
+
+## Licensing
+
+The combined Xbox 360 program and distribution are licensed under
+[GPL-3.0-only](LICENSE). Files inherited from upstream Butterscotch retain
+their MPL-2.0 licensing. See [LICENSING.md](LICENSING.md) for the file-level
+license map, provenance, and the retained
+[MPL-2.0 text](LICENSES/MPL-2.0.txt).

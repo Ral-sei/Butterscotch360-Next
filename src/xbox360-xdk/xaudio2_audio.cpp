@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ * Derived from ceilingtilefan/Butterscotch-360 commit
+ * 7f8f1ea6044dbc55560dfbd2ca9a2f45e472c02e, with later work from
+ * flaf1x/Butterscotch360-Refresh and Ral-sei.
+ */
+
 #include <xtl.h>
 #include <xaudio2.h>
 #include <cstdio>
@@ -34,6 +41,8 @@ struct XdkSoundInstance {
     uint32_t sampleRate;
     uint16_t channels;
     bool pcmOwned;          // true if this instance owns pcmData (should free)
+    uint64_t voiceSampleBase;
+    uint32_t startFrame;
 
     float currentGain;
     float targetGain;
@@ -85,6 +94,76 @@ static XdkSoundInstance* findById(XdkAudioSystem* xa, int32_t id) {
     XdkSoundInstance* inst = &Instances(xa)->instances[idx];
     if (!inst->active || inst->instanceId != id) return NULL;
     return inst;
+}
+
+static uint32_t pcmFrameCount(uint32_t pcmSize, uint16_t channels) {
+    uint32_t bytesPerFrame = (uint32_t)channels * 2u;
+    return bytesPerFrame > 0 ? pcmSize / bytesPerFrame : 0;
+}
+
+static bool submitPcmFromFrame(IXAudio2SourceVoice* voice, const uint8_t* pcmData,
+                               uint32_t pcmSize, uint16_t channels, uint32_t startFrame,
+                               bool loop, uint64_t* outSampleBase) {
+    if (!voice || !pcmData || !outSampleBase) return false;
+    uint32_t totalFrames = pcmFrameCount(pcmSize, channels);
+    if (totalFrames == 0) return false;
+    if (startFrame >= totalFrames) startFrame = 0;
+
+    voice->Stop(0);
+    voice->FlushSourceBuffers();
+
+    XAUDIO2_VOICE_STATE state;
+    voice->GetState(&state, 0);
+    *outSampleBase = (uint64_t)state.SamplesPlayed;
+
+    XAUDIO2_BUFFER first;
+    memset(&first, 0, sizeof(first));
+    first.AudioBytes = pcmSize;
+    first.pAudioData = pcmData;
+    first.PlayBegin = startFrame;
+
+    HRESULT hr;
+    if (loop && startFrame > 0) {
+        // Play the seek-to-end tail once, then continue with a full-buffer loop.
+        hr = voice->SubmitSourceBuffer(&first);
+        if (FAILED(hr)) return false;
+
+        XAUDIO2_BUFFER looping;
+        memset(&looping, 0, sizeof(looping));
+        looping.AudioBytes = pcmSize;
+        looping.pAudioData = pcmData;
+        looping.LoopCount = XAUDIO2_LOOP_INFINITE;
+        hr = voice->SubmitSourceBuffer(&looping);
+        if (FAILED(hr)) {
+            voice->FlushSourceBuffers();
+            return false;
+        }
+        return true;
+    }
+
+    if (loop) {
+        first.LoopCount = XAUDIO2_LOOP_INFINITE;
+    } else {
+        first.Flags = XAUDIO2_END_OF_STREAM;
+    }
+    return SUCCEEDED(voice->SubmitSourceBuffer(&first));
+}
+
+static float voiceTrackPosition(IXAudio2SourceVoice* voice, uint32_t sampleRate,
+                                uint32_t totalFrames, uint32_t startFrame,
+                                uint64_t sampleBase, bool loop) {
+    if (!voice || sampleRate == 0 || totalFrames == 0) return 0.0f;
+    XAUDIO2_VOICE_STATE state;
+    voice->GetState(&state, 0);
+    uint64_t played = (uint64_t)state.SamplesPlayed;
+    uint64_t elapsed = played >= sampleBase ? played - sampleBase : 0;
+    uint64_t frame = (uint64_t)startFrame + elapsed;
+    if (loop) {
+        frame %= totalFrames;
+    } else if (frame > totalFrames) {
+        frame = totalFrames;
+    }
+    return (float)frame / (float)sampleRate;
 }
 
 static void destroyInstance(XdkSoundInstance* inst, XdkAudioSystem* xa) {
@@ -277,23 +356,15 @@ static int32_t xdkPlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
         if (!stream->active || !stream->pcmData || !stream->pVoice) return -1;
 
         stream->loop = loop;
+        stream->paused = false;
         stream->volume = 1.0f;
 
-        // Submit PCM buffer
-        XAUDIO2_BUFFER buf;
-        memset(&buf, 0, sizeof(buf));
-        buf.Flags = XAUDIO2_END_OF_STREAM;
-        buf.AudioBytes = stream->pcmSize;
-        buf.pAudioData = stream->pcmData;
-        if (loop) {
-            buf.LoopCount = XAUDIO2_LOOP_INFINITE;
-            buf.Flags = 0;
-        }
-
         IXAudio2SourceVoice* pVoice = (IXAudio2SourceVoice*)stream->pVoice;
-        pVoice->Stop();
-        pVoice->FlushSourceBuffers();
-        pVoice->SubmitSourceBuffer(&buf);
+        stream->startFrame = 0;
+        if (!submitPcmFromFrame(pVoice, stream->pcmData, stream->pcmSize,
+                                stream->channels, 0, loop, &stream->voiceSampleBase)) {
+            return -1;
+        }
         pVoice->SetVolume(stream->volume * xa->masterGain);
         pVoice->SetFrequencyRatio(stream->pitch);
         pVoice->Start(0);
@@ -530,20 +601,10 @@ static int32_t xdkPlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
         return inst->instanceId;
     }
 
-    // Submit PCM buffer
-    XAUDIO2_BUFFER buf;
-    memset(&buf, 0, sizeof(buf));
-    buf.Flags = XAUDIO2_END_OF_STREAM;
-    buf.AudioBytes = inst->pcmSize;
-    buf.pAudioData = inst->pcmData;
-    if (loop) {
-        buf.LoopCount = XAUDIO2_LOOP_INFINITE;
-        buf.Flags = 0; // don't signal end if looping
-    }
-
-    hr = inst->pVoice->SubmitSourceBuffer(&buf);
-    if (FAILED(hr)) {
-        DbgPrint("BS: SubmitSourceBuffer failed: hr=0x%08X\n", (unsigned)hr);
+    inst->startFrame = 0;
+    if (!submitPcmFromFrame(inst->pVoice, inst->pcmData, inst->pcmSize,
+                            inst->channels, 0, loop, &inst->voiceSampleBase)) {
+        DbgPrint("BS: SubmitSourceBuffer failed\n");
     }
     inst->pVoice->SetVolume(inst->currentGain * inst->sondVolume * xa->masterGain);
     inst->pVoice->SetFrequencyRatio(inst->pitch * inst->sondPitch);
@@ -650,6 +711,7 @@ static void xdkPauseSound(AudioSystem* audio, int32_t soundOrInstance) {
     if (soundOrInstance >= XDK_AUDIO_STREAM_ID_BASE) {
         int32_t slot = soundOrInstance - XDK_AUDIO_STREAM_ID_BASE;
         if (slot >= 0 && slot < XDK_MAX_AUDIO_STREAMS && xa->streams[slot].active && xa->streams[slot].pVoice) {
+            xa->streams[slot].paused = true;
             ((IXAudio2SourceVoice*)xa->streams[slot].pVoice)->Stop();
         }
         return;
@@ -677,6 +739,7 @@ static void xdkResumeSound(AudioSystem* audio, int32_t soundOrInstance) {
     if (soundOrInstance >= XDK_AUDIO_STREAM_ID_BASE) {
         int32_t slot = soundOrInstance - XDK_AUDIO_STREAM_ID_BASE;
         if (slot >= 0 && slot < XDK_MAX_AUDIO_STREAMS && xa->streams[slot].active && xa->streams[slot].pVoice) {
+            xa->streams[slot].paused = false;
             ((IXAudio2SourceVoice*)xa->streams[slot].pVoice)->Start(0);
         }
         return;
@@ -708,6 +771,7 @@ static void xdkPauseAll(AudioSystem* audio) {
     }
     for (int i = 0; i < XDK_MAX_AUDIO_STREAMS; i++) {
         if (xa->streams[i].active && xa->streams[i].pVoice) {
+            xa->streams[i].paused = true;
             ((IXAudio2SourceVoice*)xa->streams[i].pVoice)->Stop();
         }
     }
@@ -724,6 +788,7 @@ static void xdkResumeAll(AudioSystem* audio) {
     }
     for (int i = 0; i < XDK_MAX_AUDIO_STREAMS; i++) {
         if (xa->streams[i].active && xa->streams[i].pVoice) {
+            xa->streams[i].paused = false;
             ((IXAudio2SourceVoice*)xa->streams[i].pVoice)->Start(0);
         }
     }
@@ -842,20 +907,88 @@ static float xdkGetSoundPitch(AudioSystem* audio, int32_t soundOrInstance) {
 
 static float xdkGetTrackPosition(AudioSystem* audio, int32_t soundOrInstance) {
     XdkAudioSystem* xa = (XdkAudioSystem*)audio;
+    if (soundOrInstance >= XDK_AUDIO_STREAM_ID_BASE) {
+        int32_t slot = soundOrInstance - XDK_AUDIO_STREAM_ID_BASE;
+        if (slot >= 0 && slot < XDK_MAX_AUDIO_STREAMS) {
+            XdkStreamEntry* stream = &xa->streams[slot];
+            if (stream->active && stream->pVoice) {
+                return voiceTrackPosition(
+                    (IXAudio2SourceVoice*)stream->pVoice, stream->sampleRate,
+                    pcmFrameCount(stream->pcmSize, stream->channels), stream->startFrame,
+                    stream->voiceSampleBase, stream->loop
+                );
+            }
+        }
+        return 0.0f;
+    }
     if (soundOrInstance >= XDK_SOUND_INSTANCE_ID_BASE) {
         XdkSoundInstance* inst = findById(xa, soundOrInstance);
-        if (inst && inst->pVoice && inst->sampleRate > 0) {
-            XAUDIO2_VOICE_STATE state;
-            inst->pVoice->GetState(&state, 0);
-            return (float)state.SamplesPlayed / (float)inst->sampleRate;
+        if (inst && inst->pVoice) return voiceTrackPosition(
+            inst->pVoice, inst->sampleRate, pcmFrameCount(inst->pcmSize, inst->channels),
+            inst->startFrame, inst->voiceSampleBase, inst->loop
+        );
+        return 0.0f;
+    }
+    XdkInstanceArray* instances = Instances(xa);
+    for (int i = 0; i < XDK_MAX_SOUND_INSTANCES; i++) {
+        XdkSoundInstance* inst = &instances->instances[i];
+        if (inst->active && inst->soundIndex == soundOrInstance && inst->pVoice) {
+            return voiceTrackPosition(
+                inst->pVoice, inst->sampleRate, pcmFrameCount(inst->pcmSize, inst->channels),
+                inst->startFrame, inst->voiceSampleBase, inst->loop
+            );
         }
     }
     return 0.0f;
 }
 
 static void xdkSetTrackPosition(AudioSystem* audio, int32_t soundOrInstance, float positionSeconds) {
-    (void)audio; (void)soundOrInstance; (void)positionSeconds;
-    // TODO: seek support requires re-submitting buffer from offset
+    XdkAudioSystem* xa = (XdkAudioSystem*)audio;
+    if (positionSeconds < 0.0f) positionSeconds = 0.0f;
+
+    if (soundOrInstance >= XDK_AUDIO_STREAM_ID_BASE) {
+        int32_t slot = soundOrInstance - XDK_AUDIO_STREAM_ID_BASE;
+        if (slot < 0 || slot >= XDK_MAX_AUDIO_STREAMS) return;
+        XdkStreamEntry* stream = &xa->streams[slot];
+        if (!stream->active || !stream->pVoice || stream->sampleRate == 0) return;
+        XAUDIO2_VOICE_STATE state;
+        ((IXAudio2SourceVoice*)stream->pVoice)->GetState(&state, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+        if (state.BuffersQueued == 0) return;
+        uint32_t totalFrames = pcmFrameCount(stream->pcmSize, stream->channels);
+        float duration = (float)totalFrames / (float)stream->sampleRate;
+        uint32_t frame = positionSeconds >= duration
+            ? 0
+            : (uint32_t)(positionSeconds * (float)stream->sampleRate);
+        if (submitPcmFromFrame((IXAudio2SourceVoice*)stream->pVoice,
+                               stream->pcmData, stream->pcmSize, stream->channels,
+                               frame, stream->loop, &stream->voiceSampleBase)) {
+            stream->startFrame = frame;
+            if (!stream->paused) ((IXAudio2SourceVoice*)stream->pVoice)->Start(0);
+        }
+        return;
+    }
+
+    XdkInstanceArray* instances = Instances(xa);
+    for (int i = 0; i < XDK_MAX_SOUND_INSTANCES; i++) {
+        XdkSoundInstance* inst = &instances->instances[i];
+        if (!inst->active || !inst->pVoice || inst->sampleRate == 0) continue;
+        bool matches = soundOrInstance >= XDK_SOUND_INSTANCE_ID_BASE
+            ? inst->instanceId == soundOrInstance
+            : inst->soundIndex == soundOrInstance;
+        if (!matches) continue;
+
+        uint32_t totalFrames = pcmFrameCount(inst->pcmSize, inst->channels);
+        float duration = (float)totalFrames / (float)inst->sampleRate;
+        uint32_t frame = positionSeconds >= duration
+            ? 0
+            : (uint32_t)(positionSeconds * (float)inst->sampleRate);
+        if (submitPcmFromFrame(inst->pVoice, inst->pcmData, inst->pcmSize,
+                               inst->channels, frame, inst->loop,
+                               &inst->voiceSampleBase)) {
+            inst->startFrame = frame;
+            if (!inst->paused) inst->pVoice->Start(0);
+        }
+    }
 }
 
 static void xdkSetMasterGain(AudioSystem* audio, float gain) {
@@ -1085,6 +1218,7 @@ static int32_t xdkCreateStream(AudioSystem* audio, const char* filename) {
     // Store in stream entry
     XdkStreamEntry* stream = &xa->streams[freeSlot];
     stream->active = true;
+    stream->paused = false;
     stream->loop = false;
     stream->pVoice = pVoice;
     stream->pcmData = (uint8_t*)pcm;
@@ -1093,6 +1227,8 @@ static int32_t xdkCreateStream(AudioSystem* audio, const char* filename) {
     stream->channels = (uint16_t)channels;
     stream->volume = 1.0f;
     stream->pitch = 1.0f;
+    stream->voiceSampleBase = 0;
+    stream->startFrame = 0;
 
     return XDK_AUDIO_STREAM_ID_BASE + freeSlot;
 }
