@@ -94,7 +94,7 @@ cmake -DPLATFORM=desktop -DDESKTOP_BACKEND=glfw3 -DCMAKE_BUILD_TYPE=Debug ..
 make
 ```
 
-If you are using CLion, set the platform in `Settings` > `Build, Execution, Deployment` > `CMake` and add `-DDESKTOP_BACKEND=glfw3`
+If you are using CLion, set the platform in `设置` > `Build, Execution, Deployment` > `CMake` and add `-DDESKTOP_BACKEND=glfw3`
 
 Then run Butterscotch with `./butterscotch /path/to/data.win`!
 
@@ -255,8 +255,15 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 
 ## Licensing
 
-The combined Xbox 360 program and distribution are licensed under
-[GPL-3.0-only](LICENSE). Files inherited from upstream Butterscotch retain
-their MPL-2.0 licensing. See [LICENSING.md](LICENSING.md) for the file-level
-license map, provenance, and the retained
-[MPL-2.0 text](LICENSES/MPL-2.0.txt).
+This project is licensed under **GPL-3.0-only**.
+
+The Xbox 360 platform code is derived from [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) 
+by [ceilingtilefan](https://github.com/ceilingtilefan) (GPL-3.0-only). Original copyright remains with the author. 
+Because GPL-3.0 requires derivative works to be licensed under GPL-3.0, the entire project is distributed under GPL-3.0.
+
+The base engine code is inherited from [Butterscotch](https://github.com/ButterscotchRunner/Butterscotch) 
+(MPL-2.0). MPL-2.0 is compatible with GPL-3.0, allowing MPL-2.0 files to be combined into 
+a GPL-3.0 project. These files remain under their original MPL-2.0 license; see [LICENSE.MPL](LICENSE.MPL). 
+When distributed as part of this project, the overall combination is subject to GPL-3.0 terms.
+
+See [LICENSING.md](LICENSING.md) for the complete file-level license map and provenance.
