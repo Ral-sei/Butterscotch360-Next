@@ -23,7 +23,8 @@ void Instance_structIncRef(struct Instance* inst);
 void Instance_structDecRef(struct Instance* inst);
 uint32_t Instance_getInstanceId(struct Instance* inst);
 
-#include "gml_method.h"
+struct GMLMethod;
+typedef struct GMLMethod GMLMethod;
 
 // ===[ GML Data Types (4-bit type codes) ]===
 #define GML_TYPE_DOUBLE   0x0
@@ -71,7 +72,7 @@ typedef enum {
     RVALUE_ASSETREF = 9,
 } RValueType;
 
-struct RValue {
+struct BS_ALIGN(8) RValue {
     union {
         GMLReal real;
         int32_t int32;
@@ -93,7 +94,11 @@ struct RValue {
     bool ownsReference;
     uint8_t gmlStackType; // GML data type from the instruction that pushed this value
     uint8_t assetRefType; // For RVALUE_ASSETREF: Indicates the asset type (AssetRefType)
-} BS_ALIGN(8);
+};
+
+// VS2010 must see the complete RValue before it declares a function pointer
+// that returns RValue by value, otherwise it selects an incompatible UDT ABI.
+#include "gml_method.h"
 
 static inline RValue RValue_makeReal(GMLReal val) {
     RValue rv = {0};

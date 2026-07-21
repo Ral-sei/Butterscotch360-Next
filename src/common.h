@@ -35,6 +35,8 @@
 
 #if (defined(__GNUC__) && (__GNUC__ >= 3 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))) || defined(__clang__) || defined(__TINYC__)
     #define BS_ALIGN(x) __attribute__((aligned(x)))
+#elif defined(_MSC_VER)
+    #define BS_ALIGN(x) __declspec(align(x))
 #else
     #define BS_ALIGN(x)
 #endif

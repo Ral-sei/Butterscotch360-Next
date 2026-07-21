@@ -5,3 +5,13 @@ CMakeUserPresets.json
 .devcontainer/
 compat/config.mk
 /.vs
+*.xex
+*.xdb
+*.exe
+*.pdb
+*.sln.cache
+*.vcxproj.user
+*.log
+data.win
+/Debug/
+/Release/

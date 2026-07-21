@@ -11,6 +11,13 @@
 #define COMPRESSED_QOI_HEADER_SIZE_OLD 8
 #define COMPRESSED_QOI_HEADER_SIZE_NEW 12
 
+static uint32_t readUint32LE(const uint8_t* data) {
+    return (uint32_t)data[0] |
+           ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) |
+           ((uint32_t)data[3] << 24);
+}
+
 // Sign-extend the low "bits" bits of "val" to an 8-bit two's-complement value.
 static inline uint8_t signExtend(uint32_t val, int bits) {
     uint32_t mask = 1U << (bits - 1);
@@ -127,7 +134,18 @@ static uint8_t* decodeBz2Qoi(const uint8_t* blob, size_t blobSize, bool gm2022_5
     if (0 >= width || 0 >= height) return nullptr;
 
     // Upper bound on decompressed QOI: header size + width*height*5 pixel data.
-    size_t uncompressedCapacity = QOI_HEADER_SIZE + (size_t) width * (size_t) height * 5;
+    // The 2022.5+ header contains the exact decompressed size. Using the old
+    // worst-case allocation for a 2048x2048 page costs about 20 MiB and can
+    // exhaust the Xbox 360 heap after several texture pages have been uploaded.
+    if ((size_t)width > ((size_t)-1 - QOI_HEADER_SIZE) / ((size_t)height * 5)) return nullptr;
+    size_t maximumUncompressedSize = QOI_HEADER_SIZE + (size_t)width * (size_t)height * 5;
+    size_t uncompressedCapacity = maximumUncompressedSize;
+    if (gm2022_5) {
+        uint32_t declaredSize = readUint32LE(blob + COMPRESSED_QOI_HEADER_SIZE_OLD);
+        if (declaredSize < QOI_HEADER_SIZE || (size_t)declaredSize > maximumUncompressedSize) return nullptr;
+        uncompressedCapacity = (size_t)declaredSize;
+    }
+    if (uncompressedCapacity > 0xFFFFFFFFU) return nullptr;
     uint8_t* uncompressed = (uint8_t*) malloc(uncompressedCapacity);
     if (!uncompressed) return nullptr;
 
