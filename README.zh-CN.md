@@ -10,7 +10,7 @@
 
 这是 Butterscotch 的 Xbox 360 平台后端，基于官方 Butterscotch 主线迁移而来。
 
-原 [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) 长期未维护，其共享核心已大幅落后于官方 Butterscotch 主线，并且缺少支持 WAD17 。因此本项目保留 Butterscotch-360 的 Xbox 360 平台代码作为参考与起点，将其迁移到最新的 Butterscotch360-Next 主线上，并进行了大量完善，现已可启动并运行 DELTARUNE 等 WAD17 游戏。[运行视频](https://www.bilibili.com/video/BV1u6Ka6oEVE/)
+原 [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) 长期未维护，其共享核心已大幅落后于官方 Butterscotch 主线，并且缺少支持 WAD17 。因此本项目保留 Butterscotch-360 的 Xbox 360 平台代码作为参考与起点，将其迁移到最新的 Butterscotch 主线上，并进行了大量完善，现已可启动并运行 DELTARUNE 等 WAD17 游戏。[运行视频](https://www.bilibili.com/video/BV1u6Ka6oEVE/)
 
 它完整保留了官方 Butterscotch 的 VM、WAD17 runner 和数据解析实现。
 
@@ -125,7 +125,7 @@ cmake -DPLATFORM=desktop -DDESKTOP_BACKEND=glfw3 -DCMAKE_BUILD_TYPE=Debug ..
 make
 ```
 
-If you are using CLion, set the platform in `设置` > `Build, Execution, Deployment` > `CMake` and add `-DDESKTOP_BACKEND=glfw3`
+If you are using CLion, set the platform in `Settings` > `Build, Execution, Deployment` > `CMake` and add `-DDESKTOP_BACKEND=glfw3`
 
 Then run Butterscotch with `./butterscotch /path/to/data.win`!
 
@@ -240,7 +240,7 @@ Here's a video :3 https://youtu.be/TLJtV2WnrmQ
 
 ### DELTARUNE Chapter 2 (GLFW) [WAD Version 17]
 
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/0ddf24e8-ad2b-4642-9f32-a542d1d942e0" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/d0df9858-ad2b-4642-9f32-a542d1d942e0" />
 
 ### DELTARUNE Chapter 2 (PlayStation 2) [WAD Version 17]
 
@@ -248,9 +248,9 @@ Here's a video :3 https://youtu.be/uuN72Hv50d4
 
 ### DELTARUNE Chapter 3 (GLFW) [WAD Version 17]
 
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/7b49d434-e66f-4ee3-bfe8-c0b4f45cebe7" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/afbe67ad-4706-4882-a9c9-6c239cb57c69" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/d83c9eb9-e9b9-410e-8d3d-3663ede23fab" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/7b49d434-e66f-4ee3-bfe8-c0b4f45ceeb7" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/afbe62ad-4706-4882-a9c9-6c239ed57c69" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/d83c9f8c-e9b9-410e-8d3d-3663ede23fab" />
 
 ### DELTARUNE Chapter 3 (PlayStation 2) [WAD Version 17]
 
@@ -258,31 +258,31 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 
 ### DELTARUNE Chapter Selector (GLFW) [WAD Version 17]
 
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/b8a848df-fd1c-49b7-9602-e8020ac85d5d" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/b8a848df-fd1c-49b7-9602-e8020ac86d5d" />
 
 ### Undertale 10th Anniversary (GLFW) [WAD Version 17]
 
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/4ec0c669-23f1-4bb1-8291-6aaf626a690f" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/4ec0c64e-23f1-4bb1-8291-6aaf626a690f" />
 <img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/4ea7d078-784d-4861-aeb1-4ee2d1d70508" />
-<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/45eb4d59-5e7b-4930-bb7e-2f2c49b76a49" />
+<img width="160" height="120" alt="image" src="https://github.com/user-attachments/assets/45eb5be9-5e7b-4930-bb7e-2f2c49c76a49" />
 
 ### NXTALE (Undertale for Xbox One) (GLFW) [WAD Version 17]
 
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/7c4e2226-76e4-495e-8382-fad2dbdef207" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/6af34166-66c6-44dd-8712-907641520073" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/150aec4c-8cfb-4cef-9db0-f3390a7d0b14" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/4e348e9e-11de-4c8c-953c-f7b776bb4eb8" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/7c4e2224-76e4-495e-8382-fad2dbdef207" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/6af34191-66c6-44dd-8712-907641520073" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/150aec4c-8cfb-4cef-9db0-f339158b0d14" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/4e3489e8-11de-4c8c-953c-f7b776bb4eb8" />
 
 ### AM2R (GLFW) [WAD Version 14]
 
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/3e46dfed-487c-4d91-9cd5-c71adc8cab5b" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/a4b4f61b-dae4-4d0f-8611-12e7a1fc8d8c" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/d522be68-1003-4208-bf6b-d59a0416ceba" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/3e46dfed-487c-4d91-9cd5-c71adc7a6cb5" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/4a4b6da1-dae4-4d0f-8611-12e7a1fc8d8c" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/d522be68-1003-4208-bf6b-d59a004606ba" />
 
 ### GameMaker: Studio Platformer Demo (GLFW) [WAD Version 10]
 
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4026a7e3176" />
-<img width="160" alt="image" src="https://github.com/user-attachments/assets/3702f061-01fe-4b04-9e6c-b6932e5c46e6" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4029e1e3176" />
+<img width="160" alt="image" src="https://github.com/user-attachments/assets/3702a261-01fe-4b04-9e6c-b69336c2ce46" />
 
 ## Licensing
 

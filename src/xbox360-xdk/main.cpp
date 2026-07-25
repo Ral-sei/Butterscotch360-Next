@@ -15,6 +15,7 @@
 #include "xdk_file_system.h"
 #include "xdk_gamepad.h"
 #include "xdk_phase1_probe.h"
+#include "xdk_ui.h"
 
 #include <d3d9.h>
 #include <stdarg.h>
@@ -39,7 +40,7 @@ extern "C" void Butterscotch_xdkAbort(const char* file, int line) {
     }
 }
 
-static DataWin* loadDataWin(const char* path) {
+static DataWin* loadDataWin(const char* path, XdkUi* ui) {
     DataWinParserOptions options;
     memset(&options, 0, sizeof(options));
     options.parseGen8 = true;
@@ -68,6 +69,9 @@ static DataWin* loadDataWin(const char* path) {
     options.skipLoadingPreciseMasksForNonPreciseSprites = true;
     options.lazyLoadRooms = true;
     options.lazyLoadTextures = true;
+    options.lazyLoadAudio = true;
+    options.progressCallback = XdkUi_dataWinProgress;
+    options.progressCallbackUserData = ui;
     return DataWin_parse(path, options);
 }
 
@@ -108,7 +112,7 @@ static IDirect3DDevice9* createD3dDevice(IDirect3D9** outD3d) {
 
 VOID __cdecl main() {
     const char* dataWinPath = "game:\\data.win";
-    Butterscotch_xdkLog("Phase 2/4 startup (D3D9 + XAudio2)");
+    Butterscotch_xdkLog("Phase 5 startup (loading UI + diagnostics)");
 
     XdkFileSystem* xdkFileSystem = XdkFileSystem_create(dataWinPath);
     if (!xdkFileSystem) {
@@ -131,15 +135,21 @@ VOID __cdecl main() {
         return;
     }
 
+    XdkUi* ui = XdkUi_create(device);
+    if (ui) XdkUi_drawLoading(ui, 0.03f, "Opening data.win");
+
     Butterscotch_xdkLog("parsing data.win");
-    DataWin* dataWin = loadDataWin(dataWinPath);
+    DataWin* dataWin = loadDataWin(dataWinPath, ui);
     if (!dataWin) {
         Butterscotch_xdkLog("fatal: DataWin_parse failed");
+        XdkUi_destroy(ui);
         device->Release();
         d3d->Release();
         XdkFileSystem_destroy(xdkFileSystem);
         return;
     }
+
+    if (ui) XdkUi_drawLoading(ui, 0.94f, "Initializing runtime");
 
     Butterscotch_xdkLog(
         "loaded %s (WAD %u, GameMaker %u.%u.%u.%u)",
@@ -173,19 +183,15 @@ VOID __cdecl main() {
     XdkInput_beginFrame(&input, runner->gamepads, runner->keyboard);
 
     Butterscotch_xdkLog("initializing first room");
+    if (ui) XdkUi_drawLoading(ui, 0.98f, "Entering first room");
     Runner_initFirstRoom(runner);
     Butterscotch_xdkLog(
-        "Phase 2/4 ready (room=%s, textures=%u, audio=%s, controllers=%d)",
+        "Phase 5 ready (room=%s, textures=%u, audio=%s, controllers=%d)",
         runner->currentRoom && runner->currentRoom->name ? runner->currentRoom->name : "unknown",
         dataWin->txtr.count,
         xdkAudio->initialized ? "ready" : "failed",
         RunnerGamepad_getDeviceCount(runner->gamepads)
     );
-
-    int32_t gameWidth = (int32_t)dataWin->gen8.defaultWindowWidth;
-    int32_t gameHeight = (int32_t)dataWin->gen8.defaultWindowHeight;
-    if (gameWidth <= 0) gameWidth = 640;
-    if (gameHeight <= 0) gameHeight = 480;
 
     LARGE_INTEGER frequency;
     LARGE_INTEGER previousTime;
@@ -222,7 +228,67 @@ VOID __cdecl main() {
             targetFrameTime = 1.0 / (double)roomSpeed;
         }
 
+        if (runner->shouldExit) break;
+
         if (framesRun > 0) {
+            if (!runner->appSurfaceEnabled) {
+                runner->applicationWidth = XDK_FRAMEBUFFER_WIDTH;
+                runner->applicationHeight = XDK_FRAMEBUFFER_HEIGHT;
+                runner->usingAppSurface = false;
+            } else {
+                if (runner->applicationWidth <= 0 || runner->applicationHeight <= 0) {
+                    runner->applicationWidth = (int32_t)dataWin->gen8.defaultWindowWidth;
+                    runner->applicationHeight = (int32_t)dataWin->gen8.defaultWindowHeight;
+                }
+                runner->usingAppSurface = true;
+            }
+            int32_t gameWidth = runner->applicationWidth > 0
+                ? runner->applicationWidth
+                : 640;
+            int32_t gameHeight = runner->applicationHeight > 0
+                ? runner->applicationHeight
+                : 480;
+            int32_t nativeWidth = (int32_t)dataWin->gen8.defaultWindowWidth;
+            int32_t nativeHeight = (int32_t)dataWin->gen8.defaultWindowHeight;
+            if (nativeWidth <= 0) nativeWidth = 640;
+            if (nativeHeight <= 0) nativeHeight = 480;
+
+            // A border/widescreen mod may enlarge the logical window without
+            // updating every view port. Preserve the native pixel scale and
+            // expose the added area through the existing widescreen camera path.
+            runner->widescreenExtraWidth = 0;
+            runner->widescreenExtraHeight = 0;
+            int64_t requestedAspect = (int64_t)gameWidth * (int64_t)nativeHeight;
+            int64_t nativeAspect = (int64_t)gameHeight * (int64_t)nativeWidth;
+            if (requestedAspect > nativeAspect) {
+                int32_t scaledNativeWidth = (int32_t)(
+                    ((int64_t)gameHeight * nativeWidth + nativeHeight / 2) / nativeHeight
+                );
+                if (gameWidth > scaledNativeWidth) {
+                    runner->widescreenExtraWidth = gameWidth - scaledNativeWidth;
+                }
+            } else if (requestedAspect < nativeAspect) {
+                int32_t scaledNativeHeight = (int32_t)(
+                    ((int64_t)gameWidth * nativeHeight + nativeWidth / 2) / nativeWidth
+                );
+                if (gameHeight > scaledNativeHeight) {
+                    runner->widescreenExtraHeight = gameHeight - scaledNativeHeight;
+                }
+            }
+
+            static int32_t lastGameWidth = 0;
+            static int32_t lastGameHeight = 0;
+            if (gameWidth != lastGameWidth || gameHeight != lastGameHeight) {
+                Butterscotch_xdkLog(
+                    "render size: application=%dx%d framebuffer=%dx%d widescreenExtra=%dx%d",
+                    gameWidth, gameHeight,
+                    XDK_FRAMEBUFFER_WIDTH, XDK_FRAMEBUFFER_HEIGHT,
+                    runner->widescreenExtraWidth, runner->widescreenExtraHeight
+                );
+                lastGameWidth = gameWidth;
+                lastGameHeight = gameHeight;
+            }
+
             Runner_drawPre(runner, XDK_FRAMEBUFFER_WIDTH, XDK_FRAMEBUFFER_HEIGHT);
             Runner_beginFrame(
                 runner,
@@ -244,16 +310,23 @@ VOID __cdecl main() {
                 gameWidth,
                 gameHeight
             );
+            XdkUi_updateDiagnostics(ui, deltaTime, framesRun);
+            XdkUi_drawDiagnostics(ui, runner, renderer);
             D3D9Renderer_present(renderer);
         } else {
+            XdkUi_updateDiagnostics(ui, deltaTime, framesRun);
             Sleep(1);
         }
 
-        audio->vtable->update(audio, (float)deltaTime);
+        if (!runner->shouldExit) {
+            audio->vtable->update(audio, (float)deltaTime);
+        }
     }
 
+    Butterscotch_xdkLog("game exit requested; shutting down runtime");
     audio->vtable->destroy(audio);
     runner->audioSystem = NULL;
+    XdkUi_destroy(ui);
     renderer->vtable->destroy(renderer);
     Runner_free(runner);
     VM_free(vm);

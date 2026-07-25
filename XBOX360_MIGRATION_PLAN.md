@@ -19,22 +19,71 @@ Baseline at audit time:
 - Commit: `f8de9da8982fca6550a2051da9e44c8c1644b375`
 - Working tree: clean
 
-### Current Implementation Status (2026-07-21)
+### Current Implementation Status (2026-07-22)
 
-- Active migration branch: `port/xbox360`.
+- Active migration branch: `main`.
 - Phase 0, Phase 1, and Phase 2 are complete and have passed XDK Release builds.
 - Phase 3 is partially complete: user surfaces, target switching, surface copy,
-  dynamic sprites, GUI projection, lazy TXTR loading, and an Xbox texture cache
-  are implemented. Full application-surface composition, camera matrices,
-  shader emulation, and surface readback remain incomplete.
+  dynamic sprites, GUI projection, application-surface composition, lazy TXTR
+  loading, and an Xbox texture cache are implemented. Application and user
+  surfaces own ordinary sample textures. Rendering now uses one fixed
+  1280x704 EDRAM alias target at `D3DSURFACE_PARAMETERS.Base = 0`. Surfaces that
+  fit the target and satisfy the 8-pixel resolve alignment use direct Resolve;
+  larger or unaligned surfaces use Xbox 360 predicated tiling with at most 32
+  tile rectangles. Existing contents are restored with an opaque GPU quad.
+  GPU resource creation, locking, release, readback, and D3DX copies suspend an
+  active tiling bracket and restore it afterward. This replaces the failed
+  all-surface predicated path, which performed texture locks inside the bracket,
+  and the earlier dynamic shared-target design, which
+  repeatedly returned `0x8007000E` for large surfaces and eventually triggered
+  a `CPU Synchronization` GPU hang. Blend operations are now persistent renderer
+  state and are restored after Surface helper draws. The Xbox mappings for
+  `bm_max`, `bm_subtract`, `bm_min`, and `bm_reverse_subtract` now match the
+  OpenGL reference implementation; the previous mappings used incorrect blend
+  equations or factors and could corrupt room-specific lighting composites.
+  Hardware testing confirms that the corrected blend state resolves the white
+  character rendering in the affected town rooms. Broader long-run Surface and
+  GPU-hang validation remains. Camera matrices and shader emulation remain
+  incomplete.
 - Phase 4 has a working XAudio2 baseline. Embedded Chapter 4 audio, external
   OGG decoding, audio groups, gain, pitch, looping, and normal playback have
-  run on hardware. Track-position seeking and long-run stress validation remain.
+  run on hardware. Track-position seeking now passes XDK Release compilation
+  for normal instances and decoded streams, but still needs hardware validation.
+  Long-run stress validation remains.
 - Phase 5 texture diagnostics and tuning are partially complete. Static TXTR
-  pages use `A4R4G4B4` and a 240 MiB frame-aware LRU cache on Xbox 360.
-- Current hardware artifact:
-  `Release/Butterscotch360-Next.xex`, 3,973,120 bytes, SHA-256
-  `A49D42D17CDB3F2298679E110F69E0768B80CDFCE49C01EFC554EF19B16EEB2E`.
+  pages use `A4R4G4B4` and a 240 MiB frame-aware LRU cache on Xbox 360. A
+  192 MiB hardware experiment caused earlier eviction and visible stalls, then
+  still corrupted `room_town_school` at 390.2/512 MiB RAM with 121.8 MiB free.
+  Its log contained no texture allocation failure; instead it showed a 640x480
+  user surface being created and freed nearly every frame. The lower cache
+  limit was therefore reverted and surface ownership was corrected instead.
+- Current fixed-target, corrected-blend-state XDK Release candidate (white
+  character issue hardware-validated):
+  `Release/Butterscotch360-Next.xex`, 4,071,424 bytes, SHA-256
+  `150B661E78133613C1241F99A704F58AFAA13B99ACBB51F870787A437E86DB33`.
+- The preceding fixed-target candidate, SHA-256
+  `4EC1BFD544EFB9B43B3CAA4108103B12621BD6CE254A10D53ACBAD6AD8768D33`,
+  eliminated the earlier resource-lock-inside-tiling hang path, but characters
+  still appeared white in specific town rooms. Overlapping characters remained
+  visible through transparent pixels, indicating intact sprite textures beneath
+  a room-specific lighting/Surface composite rather than global TXTR corruption.
+- The preceding all-surface predicated-tiling candidate, SHA-256
+  `97B198C449FE2D11233662CE2CF704C7902E9AFED0E7371BF1C5EE00029F62D6`,
+  still hung on hardware at the first frames of
+  `room_dw_fcastle_top_challenge`. Its GPU report changed from the earlier CPU
+  synchronization failure to an unrecognized `RBBM/CP/BC` hang. The code kept
+  a tiling bracket open even for the 640x480 application surface while lazy TXTR
+  loading called `CreateTexture`, `LockRect`, and `Release`; XDK documentation
+  explicitly excludes resource locking from an active tiling bracket.
+- The preceding dynamic shared-target candidate, SHA-256
+  `04F09B73C350009DB1D35A9FCF804A83F734D1DFDE988D8D5C295C6E0E672E89`,
+  failed on hardware. Large surfaces such as 2040x240, 1040x2000,
+  1200x2920, and 2480x80 caused repeated target allocation failures; the final
+  log reported `ERR[D3D]: The GPU is hung!` with `RBBM_STATUS` identifying CPU
+  synchronization and a likely software synchronization error.
+- Last hardware-tested application-surface artifact before the user-surface
+  allocation fix: SHA-256
+  `483B26681C3825B6E77731C3CB39BE1BBDB48F7FCD7750A5F3170FDABBD98942`.
 - Chapter 4 fixture: 132,001,470-byte `data.win`, SHA-256
   `07E2DF1088E56532B992FC9C59F88A4D66420ADA4DA9FF49BA6823A7F2CC3D47`.
 - Known deferred issue: selecting the in-game return-to-title option hangs after
@@ -60,8 +109,8 @@ Git roles should be:
 
 - `origin`: the user's `Butterscotch360-Next` fork
 - `upstream`: the official Butterscotch repository, when configured
-- `main`: tracks the current official-derived baseline
-- `port/xbox360`: carries the Xbox 360 platform migration
+- `main`: carries the current official-derived baseline and the Xbox 360
+  platform migration
 
 ### Butterscotch360-Refresh
 
@@ -92,7 +141,7 @@ newer WAD17 implementation.
 
 ## 3. Migration Rules
 
-1. Develop on a new `port/xbox360` branch created from Next `main`.
+1. Continue the Xbox 360 migration directly on Next `main`.
 2. Never copy old shared files such as `vm.c`, `runner.c`, or `data_win.c` over Next.
 3. Adapt platform code to Next interfaces instead of modifying Next interfaces to
    look like the old fork.
@@ -280,7 +329,7 @@ Do not enable `NO_RVALUE_INT64` for the WAD17 target.
 
 ### Phase 0: Branch and Build Skeleton - Complete
 
-- Create `port/xbox360` from Next `main`.
+- Continue from Next `main` as the active migration branch.
 - Add the XDK solution and project.
 - Add the reduced compatibility header and platform header shims.
 - Align the project source list with Next.
@@ -293,7 +342,7 @@ Exit criteria:
   errors.
 - No Next shared source file has been replaced by an old copy.
 
-Result: `port/xbox360`, the VS2010/XDK solution and project, reduced
+Result: `main`, the VS2010/XDK solution and project, reduced
 compatibility shims, endian definitions, and the Next-aligned source list are
 in place. Release builds succeed without shared-core compile errors.
 
@@ -350,18 +399,48 @@ Implemented so far:
 
 - Basic user surfaces, render-target switching, copy, resize, free, and texture
   handles.
-- Dynamic sprites created from surfaces.
+- Dynamic sprites created from the requested surface rather than the currently
+  bound target.
+- Surface pixel readback from the resolved sample texture into top-down RGBA8
+  output.
 - GUI projection and the current Runner draw lifecycle.
+- Ordinary sample textures for every logical surface plus one fixed 1280x704
+  EDRAM alias target at base 0. Small 8-pixel-aligned surfaces use ordinary
+  sub-rectangle Resolve, while Xbox predicated tiling covers larger or unaligned
+  logical surfaces with up to 32 aligned tile rectangles. Target switches close
+  the tiling bracket and resolve the full logical surface;
+  restoration uses an opaque GPU blit inside the next tiling bracket because
+  the XDK D3DX surface-copy path crashes when its destination is EDRAM.
+  Automatic letterboxed application-surface composition, manual auto-draw
+  suppression, and target restoration use the same path. No EDRAM target is
+  created, resized, or released during room rendering.
+- Lazy TXTR upload/eviction, dynamic sprite upload/deletion, surface
+  create/resize/free, surface copy, and pixel readback never lock, create, or
+  release a GPU resource inside a tiling bracket. An active large-surface pass
+  is resolved before the resource operation and restored afterward.
+- Hardware rejected the earlier one-target-per-surface and dynamic shared-target
+  designs. The former exhausted EDRAM immediately. The latter failed on the
+  game's tall and wide effect surfaces with `0x8007000E`; repeated target churn
+  then ended in a D3D CPU-synchronization GPU hang. These failures occurred
+  independently of the TXTR cache's reported resident size.
+- One recently freed surface texture is retained for exact-size reuse, avoiding
+  repeated D3D allocation when a game creates and frees the same temporary
+  surface every frame. Successful lifecycle diagnostics are rate-limited.
+- Full-surface local coordinates for explicit user targets and view transforms
+  when restoring implicit application/view surface targets.
 - Lazy TXTR loading and release of uploaded compressed blobs.
 - Xbox-only static texture conversion to linear `A4R4G4B4`.
 - A 240 MiB frame-aware LRU that protects pages used in the current frame and
-  backs off failed allocations instead of retrying every draw call.
+  backs off failed allocations instead of retrying every draw call. Cache
+  uploads stop if the LRU cannot satisfy an allocation instead of exceeding the
+  budget, and the diagnostic overlay reports resident TXTR page count.
 
 Remaining:
 
-- Full application-surface composition and validation.
+- Broader hardware validation of target restoration, user-surface orientation,
+  auto-draw suppression, and surface readback.
 - Camera/view matrix semantics beyond the current 2D transform path.
-- Custom GameMaker shaders and surface pixel readback.
+- Custom GameMaker shaders.
 - Broader room-transition and dynamic-surface regression coverage.
 
 ### Phase 4: XAudio2 - Baseline Implemented, Validation In Progress
@@ -378,8 +457,10 @@ Exit criteria:
 
 Result so far: Chapter 4 audio plays normally on hardware, including its loaded
 audio group. Embedded and external WAV/OGG paths, looping, pause/resume, gain,
-pitch, duration, and streaming callbacks are implemented. Track-position seek,
-many-voice stress, and long-duration memory testing remain.
+pitch, duration, streaming callbacks, and track-position seek are implemented.
+Seek preserves paused and looping state and maintains the reported position
+across XAudio2's cumulative sample counter. Seek, many-voice stress, and
+long-duration memory testing still require hardware coverage.
 
 ### Phase 5: Refresh Enhancements - Partially Started
 
@@ -407,9 +488,9 @@ Run the same scenarios after every major phase:
 | GMS1 baseline | Boot, first room, movement, room transition, save/load, audio | Desktop regression previously passed; Xbox hardware coverage still required |
 | WAD17 baseline | Boot, VM execution, layers, textures, surfaces, input, save/load | Chapter 4 boots and plays through tested church/arena rooms; save/load and return-to-title remain incomplete |
 | Input | Keyboard mapping, GameMaker gamepad API, analog sticks, triggers | Slot 0 and keyboard mapping work on hardware; four-slot coverage pending |
-| Rendering | Sprites, rotation, blend modes, GUI, application surface, user surfaces | Sprites, rotation, alpha fades, GUI, and basic user surfaces work; full application surface and shaders pending |
-| Audio | Embedded audio, external OGG, looping, pause/resume, pitch and gain | Normal Chapter 4 playback and audio groups work; seek and long-run stress pending |
-| Memory | Startup peak, room transition peak, texture eviction, long-run stability | 16-bit TXTR plus 240 MiB LRU is smooth in tested rooms; extended play and dynamic-surface peaks pending |
+| Rendering | Sprites, rotation, blend modes, GUI, application surface, user surfaces | Sprites, rotation, alpha fades, GUI, basic user surfaces, and resolved application-surface composition work on hardware; readback and broader target restoration need validation; shaders pending |
+| Audio | Embedded audio, external OGG, looping, pause/resume, pitch and gain | Normal Chapter 4 playback and audio groups work; seek compiles but needs hardware validation; long-run stress pending |
+| Memory | Startup peak, room transition peak, texture eviction, long-run stability | The 192 MiB experiment caused stalls without preventing corruption; 240 MiB is restored. Dynamic shared EDRAM targets failed with `0x8007000E` and a GPU hang; the fixed-target predicated-tiling replacement awaits hardware validation |
 
 Record the exact test game build and `data.win` hash so Refresh, the local
 modified build, and Next can be compared consistently.
@@ -431,13 +512,21 @@ xbox360: add targeted game compatibility fixes
 
 ## 9. Next Implementation Priorities
 
-1. Complete and validate application-surface composition, target restoration,
-   and user-surface orientation across room and GUI passes.
+1. Validate fixed-target predicated tiling from `ROOM_INITIALIZE` through
+   `room_town_school`, `room_town_south`, and `room_town_mid`, then exercise
+   `room_dw_fcastle_orange_gauntlet`, `room_dw_fcastle_top_ascent`, and
+   `room_dw_fcastle_top_challenge`. Check target restoration, user-surface
+   orientation, auto-draw suppression, and surface readback. A normal run should
+   log one line containing `surface tile target size=1280x704 base=0` and
+   `mode=direct-small/predicated-large`, with no
+   `surface tile target create failed`, `surface tiling failed`,
+   `surface EndTiling failed`,
+   old `primary/wide surface target create failed`, or `GPU is hung` message.
 2. Run the GMS1 hardware regression matrix, including save/load and room
    transitions, without changing the current Next VM or parser baseline.
-3. Stress XAudio2 over long sessions and implement
-   `audio_sound_set_track_position` seeking.
-4. Validate the 240 MiB texture cache through later Chapter 4 rooms, watching
+3. Validate `audio_sound_set_track_position` on hardware, then stress XAudio2
+   over long sessions.
+4. Validate the restored 240 MiB texture cache through later Chapter 4 rooms, watching
    title memory, `CreateTexture` failures, gradient banding, and dynamic-surface
    peaks.
 5. Expand XInput from slot 0 to four controllers if required.

@@ -274,15 +274,30 @@ static void xdkAudioDestroy(AudioSystem* audio) {
     XdkAudioSystem* xa = (XdkAudioSystem*)audio;
     XdkInstanceArray* arr = Instances(xa);
 
+    // Source voices must be destroyed while their owning XAudio2 engine is
+    // still alive. In particular, external audio streams can remain active
+    // when game_end exits the main loop.
     if (arr) {
         for (int i = 0; i < XDK_MAX_SOUND_INSTANCES; i++) {
             if (arr->instances[i].active) destroyInstance(&arr->instances[i], xa);
         }
         free(arr);
+        xa->instanceData = NULL;
     }
 
-    if (xa->pMasterVoice) ((IXAudio2MasteringVoice*)xa->pMasterVoice)->DestroyVoice();
-    if (xa->pXAudio2) ((IXAudio2*)xa->pXAudio2)->Release();
+    for (int i = 0; i < XDK_MAX_AUDIO_STREAMS; i++) {
+        XdkStreamEntry* stream = &xa->streams[i];
+        if (stream->pVoice) {
+            IXAudio2SourceVoice* voice = (IXAudio2SourceVoice*)stream->pVoice;
+            voice->Stop(0);
+            voice->FlushSourceBuffers();
+            voice->DestroyVoice();
+            stream->pVoice = NULL;
+        }
+        free(stream->pcmData);
+        stream->pcmData = NULL;
+        stream->active = false;
+    }
 
     // Free audio groups (skip group 0 which is the main dataWin freed elsewhere)
     if (arrlen(xa->base.audioGroups) > 1) {
@@ -292,14 +307,13 @@ static void xdkAudioDestroy(AudioSystem* audio) {
     }
     arrfree(xa->base.audioGroups);
 
-    // Free streams
-    for (int i = 0; i < XDK_MAX_AUDIO_STREAMS; i++) {
-        if (xa->streams[i].active) {
-            if (xa->streams[i].pVoice) {
-                ((IXAudio2SourceVoice*)xa->streams[i].pVoice)->DestroyVoice();
-            }
-            free(xa->streams[i].pcmData);
-        }
+    if (xa->pMasterVoice) {
+        ((IXAudio2MasteringVoice*)xa->pMasterVoice)->DestroyVoice();
+        xa->pMasterVoice = NULL;
+    }
+    if (xa->pXAudio2) {
+        ((IXAudio2*)xa->pXAudio2)->Release();
+        xa->pXAudio2 = NULL;
     }
 
     free(xa);
@@ -439,10 +453,17 @@ static int32_t xdkPlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
         } else {
             FILE* f = (FILE*)groupDw->lazyLoadFile;
             if (!f) { DbgPrint("BS: no data.win file handle for audio\n"); return inst->instanceId; }
-            fseek(f, entry->dataOffset, SEEK_SET);
             oggData = (uint8_t*)malloc(entry->dataSize);
             if (!oggData) return inst->instanceId;
-            fread(oggData, 1, entry->dataSize, f);
+            long previousPosition = ftell(f);
+            if (fseek(f, entry->dataOffset, SEEK_SET) != 0
+                || fread(oggData, 1, entry->dataSize, f) != entry->dataSize) {
+                if (previousPosition >= 0) fseek(f, previousPosition, SEEK_SET);
+                free(oggData);
+                DbgPrint("BS: failed to read lazy audio entry %d\n", sound->audioFile);
+                return inst->instanceId;
+            }
+            if (previousPosition >= 0) fseek(f, previousPosition, SEEK_SET);
             oggSize = (int)entry->dataSize;
             freeOggData = true;
         }
@@ -1050,6 +1071,7 @@ static void xdkGroupLoad(AudioSystem* audio, int32_t groupIndex) {
     DataWinParserOptions opts;
     memset(&opts, 0, sizeof(opts));
     opts.parseAudo = 1;
+    opts.lazyLoadAudio = 1;
     DataWin* audioGroup = DataWin_parse(resolved, opts);
     free(resolved);
     if (audioGroup) {

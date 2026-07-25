@@ -10,7 +10,7 @@
 
 This is the Xbox 360 platform backend for Butterscotch, migrated from the official Butterscotch mainline.
 
-The original [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) has been unmaintained for a long time, and its shared core has fallen significantly behind the official Butterscotch mainline, making it unable to support WAD17 and other newer formats. Therefore, this project uses the Xbox 360 platform code from Butterscotch-360 as a reference and starting point, migrates it to the latest Butterscotch360-Next mainline, and has been substantially improved. It can now boot and run WAD17 games such as DELTARUNE.
+The original [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) has been unmaintained for a long time, and its shared core has fallen significantly behind the official Butterscotch mainline, making it unable to support WAD17 and other newer formats. Therefore, this project uses the Xbox 360 platform code from Butterscotch-360 as a reference and starting point, migrates it to the latest Butterscotch mainline, and has been substantially improved. It can now boot and run WAD17 games such as DELTARUNE.
 
 It retains the official Butterscotch VM, WAD17 runner, and data parsing implementations, while adding an Xbox 360 XDK backend (D3D9 / XAudio2 / XInput).
 
@@ -286,6 +286,7 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4026a7e3176" />
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/3702f061-01fe-4b04-9e6c-b6932e5c46e6" />
+
 
 ## Licensing
 

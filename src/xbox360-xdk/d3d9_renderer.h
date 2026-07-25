@@ -25,6 +25,15 @@ typedef struct {
     void* pVertexShader;
     void* pPixelShader;
     void* pVertexDecl;
+    void** gmlVertexShaders;
+    void** gmlPixelShaders;
+    void** gmlVertexConstantTables;
+    void** gmlPixelConstantTables;
+    bool* gmlShaderCompiled;
+    uint32_t gmlShaderCount;
+    void* shaderUniformBindings;
+    uint32_t shaderUniformBindingCount;
+    uint32_t shaderUniformBindingCapacity;
 
     // Dynamic vertex buffer for batched rendering (avoids DrawPrimitiveUP per-flush CPUPU copy)
     void* pVertexBuffer;
@@ -77,12 +86,16 @@ typedef struct {
 
     // Surface data
     void* surfaceTextures[D3D9_MAX_SURFACES];   // IDirect3DTexture9* resolved for sampling
-    void* surfaceSurfaces[D3D9_MAX_SURFACES];   // IDirect3DSurface9* render target
+    void* surfaceResolveTextures[D3D9_MAX_SURFACES]; // ping-pong target for tiled content restore
     int32_t surfaceWidths[D3D9_MAX_SURFACES];
     int32_t surfaceHeights[D3D9_MAX_SURFACES];
     bool surfaceActive[D3D9_MAX_SURFACES];
     bool surfaceResolved[D3D9_MAX_SURFACES];
-    bool surfaceNeedsResolve[D3D9_MAX_SURFACES];
+    void* surfaceTileTarget;                    // IDirect3DSurface9*, fixed EDRAM alias
+    bool surfaceTilingActive;
+    void* spareSurfaceTexture;                  // one recently freed IDirect3DTexture9*
+    int32_t spareSurfaceTextureW;
+    int32_t spareSurfaceTextureH;
     int32_t currentSurfaceTarget;                // -1 = screen
 
     // GPU state (current values)
@@ -92,6 +105,8 @@ typedef struct {
     uint32_t destBlend;
     uint32_t srcBlendAlpha;
     uint32_t destBlendAlpha;
+    uint32_t blendOp;
+    uint32_t blendOpAlpha;
     bool alphaTestEnable;
     uint8_t alphaTestRef;
     bool colorWriteR, colorWriteG, colorWriteB, colorWriteA;
