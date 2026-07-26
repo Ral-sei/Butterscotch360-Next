@@ -311,7 +311,9 @@ VOID __cdecl main() {
             );
             XdkUi_updateDiagnostics(ui, deltaTime, framesRun);
             XdkUi_drawDiagnostics(ui, runner, renderer);
-            D3D9Renderer_present(renderer);
+            bool shouldPresent = runner->pendingRoom == -1;
+            D3D9Renderer_finishFrame(renderer, shouldPresent);
+            Runner_handlePendingRoomChange(runner);
         } else {
             XdkUi_updateDiagnostics(ui, deltaTime, framesRun);
             Sleep(1);

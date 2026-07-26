@@ -1193,11 +1193,13 @@ static void d3d9EndFrameEnd(Renderer* renderer) {
     flushBatch((D3D9Renderer*)renderer);
 }
 
-void D3D9Renderer_present(Renderer* renderer) {
+void D3D9Renderer_finishFrame(Renderer* renderer, bool shouldPresent) {
     D3D9Renderer* dr = (D3D9Renderer*)renderer;
     flushBatch(dr);
     Dev(dr)->EndScene();
-    Dev(dr)->Present(NULL, NULL, NULL, NULL);
+    if (shouldPresent) {
+        Dev(dr)->Present(NULL, NULL, NULL, NULL);
+    }
 }
 
 static void d3d9BeginView(Renderer* renderer, int32_t viewX, int32_t viewY, int32_t viewW, int32_t viewH,

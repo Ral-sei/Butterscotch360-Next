@@ -124,4 +124,4 @@ typedef struct {
 
 Renderer* D3D9Renderer_create(void* pd3dDevice);
 void D3D9Renderer_applyGpuState(D3D9Renderer* dr);
-void D3D9Renderer_present(Renderer* renderer);
+void D3D9Renderer_finishFrame(Renderer* renderer, bool shouldPresent);
