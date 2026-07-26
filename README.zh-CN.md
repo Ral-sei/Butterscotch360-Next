@@ -10,14 +10,13 @@
 
 这是 Butterscotch 的 Xbox 360 平台后端，基于官方 Butterscotch 主线迁移而来。
 
-原 [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) 长期未维护，其共享核心已大幅落后于官方 Butterscotch 主线，并且缺少支持 WAD17 。因此本项目保留 Butterscotch-360 的 Xbox 360 平台代码作为参考与起点，将其迁移到最新的 Butterscotch 主线上，并进行了大量完善，现已可启动并运行 DELTARUNE 等 WAD17 游戏。[运行视频](https://www.bilibili.com/video/BV1u6Ka6oEVE/)
+原 [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) 长期未维护，其共享核心已大幅落后于官方 Butterscotch 主线，并且缺少支持 WAD17 。因此本项目保留 Butterscotch-360 的 Xbox 360 平台代码作为参考与起点，使用Codex将其迁移到最新的 Butterscotch 主线上，并进行了大量完善，现已可启动并运行 DELTARUNE 等 WAD17 游戏。[运行视频](https://www.bilibili.com/video/BV1u6Ka6oEVE/)
 
 它完整保留了官方 Butterscotch 的 VM、WAD17 runner 和数据解析实现。
 
 ## 已知问题
 
-- 游戏内“返回标题”选项在转场后卡死。
-- 渲染有些问题，可能会消失/错误。
+- 无法正常游玩Pizza Tower正式版
 
 ## 使用方法
 
