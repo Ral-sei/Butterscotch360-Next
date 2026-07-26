@@ -402,11 +402,6 @@ void XdkUi_drawDiagnostics(XdkUi* ui, Runner* runner, Renderer* renderer) {
     SIZE_T usedPhysical = ui->totalPhysical > ui->availablePhysical
         ? ui->totalPhysical - ui->availablePhysical : 0;
 
-    drawQuad(ui, NULL, 14.0f, 14.0f, 650.0f, 238.0f,
-             0, 0, 1, 1, 0.025f, 0.035f, 0.045f, 0.84f);
-    drawQuad(ui, NULL, 14.0f, 14.0f, 650.0f, 18.0f,
-             0, 0, 1, 1, 1.0f, 0.68f, 0.16f, 1.0f);
-
     char line[256];
     float y = 28.0f;
     drawText(ui, "BUTTERSCOTCH360-NEXT DIAGNOSTICS  [LB+RB]",
