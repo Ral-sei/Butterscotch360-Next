@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
+#include "stdio_compat.h"
+#include "string_compat.h"
 
 #include "utils.h"
 
@@ -50,8 +50,6 @@ typedef struct {
     bool lazyLoadRooms;
     // If true, TXTR objects will be loaded on demand via DataWin_loadTxtrIfNeeded, and unloaded if memory is tight.
     bool lazyLoadTextures;
-    // If true, AUDO entries retain only their file offsets and are read by the audio backend on demand.
-    bool lazyLoadAudio;
 
     // When lazyLoadRooms is true, this list indicates which rooms should be loaded during load time instead of demand. They will also not be freed.
     StringBooleanEntry* eagerlyLoadedRooms;
@@ -873,7 +871,7 @@ typedef struct {
     bool present;
     uint32_t dataOffset; // absolute file offset to audio data
     uint32_t dataSize;   // length of audio data
-    uint8_t* data;       // owned copy of audio data, or nullptr when lazily loaded
+    uint8_t* data;       // owned copy of audio data
 } AudioEntry;
 
 typedef struct {
@@ -929,8 +927,8 @@ struct DataWin {
 
     DetectedFormat detectedFormat;
 
-    // Held open across the whole session when any lazy loading option is true.
-    // Used to satisfy on-demand room, texture, and audio reads.
+    // Held open across the whole session when DataWinParserOptions.lazyLoadRooms is true.
+    // Used by DataWin_loadRoomPayload to satisfy on-demand room payload reads.
     // nullptr when lazy loading is disabled. Closed by DataWin_free.
     FILE* lazyLoadFile;
     char* lazyLoadFilePath; // owned strdup of the original file path, for diagnostics
@@ -938,7 +936,6 @@ struct DataWin {
     size_t fileSize; // cached size of the DataWin, captured at parse time. Used for platforms where fseek(SEEK_END)+ftell is unreliable due to buffering (like the PlayStation 2).
     bool lazyLoadRooms; // mirrors the parser option so Runner can branch without re-reading options
     bool lazyLoadTextures; // ditto, but with TXTR pages
-    bool lazyLoadAudio; // ditto, but with AUDO entries
 };
 
 DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options);

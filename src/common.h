@@ -35,8 +35,6 @@
 
 #if (defined(__GNUC__) && (__GNUC__ >= 3 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))) || defined(__clang__) || defined(__TINYC__)
     #define BS_ALIGN(x) __attribute__((aligned(x)))
-#elif defined(_MSC_VER)
-    #define BS_ALIGN(x) __declspec(align(x))
 #else
     #define BS_ALIGN(x)
 #endif
@@ -60,16 +58,23 @@
         #define YIELD() ((void)0)
     #endif
 #elif defined(_MSC_VER)
-    #include <intrin.h>
-    #if defined(_M_X64) || defined(_M_IX86)
+    #if (defined(_M_X64) || defined(_M_IX86)) && _MSC_VER >= 1400
+        #include <intrin.h>
         #define YIELD() _mm_pause()
     #elif defined(_M_ARM64) || defined(_M_ARM)
+        #include <intrin.h>
         #define YIELD() __yield()
     #else
         #define YIELD() ((void)0)
     #endif
 #else
     #define YIELD() ((void)0)
+#endif
+
+#ifdef _MSC_VER
+#define longlong __int64
+#else
+#define longlong long long
 #endif
 
 #endif /* _BS_COMMON_H_ */

@@ -1071,7 +1071,6 @@ static void xdkGroupLoad(AudioSystem* audio, int32_t groupIndex) {
     DataWinParserOptions opts;
     memset(&opts, 0, sizeof(opts));
     opts.parseAudo = 1;
-    opts.lazyLoadAudio = 1;
     DataWin* audioGroup = DataWin_parse(resolved, opts);
     free(resolved);
     if (audioGroup) {

@@ -2,9 +2,9 @@
 #define _BS_RVALUE_H_
 #include <stdint.h>
 #include "common.h"
-#include <stdio.h>
+#include "stdio_compat.h"
 #include <stdlib.h>
-#include <string.h>
+#include "string_compat.h"
 
 #include "real_type.h"
 #include "stb_ds.h"
@@ -23,8 +23,7 @@ void Instance_structIncRef(struct Instance* inst);
 void Instance_structDecRef(struct Instance* inst);
 uint32_t Instance_getInstanceId(struct Instance* inst);
 
-struct GMLMethod;
-typedef struct GMLMethod GMLMethod;
+#include "gml_method.h"
 
 // ===[ GML Data Types (4-bit type codes) ]===
 #define GML_TYPE_DOUBLE   0x0
@@ -72,7 +71,7 @@ typedef enum {
     RVALUE_ASSETREF = 9,
 } RValueType;
 
-struct BS_ALIGN(8) RValue {
+struct RValue {
     union {
         GMLReal real;
         int32_t int32;
@@ -94,11 +93,7 @@ struct BS_ALIGN(8) RValue {
     bool ownsReference;
     uint8_t gmlStackType; // GML data type from the instruction that pushed this value
     uint8_t assetRefType; // For RVALUE_ASSETREF: Indicates the asset type (AssetRefType)
-};
-
-// VS2010 must see the complete RValue before it declares a function pointer
-// that returns RValue by value, otherwise it selects an incompatible UDT ABI.
-#include "gml_method.h"
+} BS_ALIGN(8);
 
 static inline RValue RValue_makeReal(GMLReal val) {
     RValue rv = {0};
@@ -301,7 +296,7 @@ static inline char* RValue_toString(RValue val) {
 #endif
             // Is this a integer?
             if (r >= -INT_SAFE_BOUND && r <= INT_SAFE_BOUND && r == (GMLReal) (int64_t) r) {
-                snprintf(buf, sizeof(buf), "%lld", (long long) (int64_t) r);
+                snprintf(buf, sizeof(buf), "%lld", (longlong) (int64_t) r);
             } else {
                 // For anything else, we format to two decimal places
                 snprintf(buf, sizeof(buf), "%.2f", (double) r);
@@ -313,7 +308,7 @@ static inline char* RValue_toString(RValue val) {
             return safeStrdup(buf);
 #ifndef NO_RVALUE_INT64
         case RVALUE_INT64:
-            snprintf(buf, sizeof(buf), "%lld", (long long) val.int64);
+            snprintf(buf, sizeof(buf), "%lld", (longlong) val.int64);
             return safeStrdup(buf);
 #endif
         case RVALUE_STRING:
@@ -376,7 +371,7 @@ static inline char* RValue_toStringTyped(RValue val) {
             return safeStrdup(buf);
 #ifndef NO_RVALUE_INT64
         case RVALUE_INT64:
-            snprintf(buf, sizeof(buf), "int64(%lld)", (long long) val.int64);
+            snprintf(buf, sizeof(buf), "int64(%lld)", (longlong) val.int64);
             return safeStrdup(buf);
 #endif
         case RVALUE_STRING: {

@@ -58,7 +58,7 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
-      <PreprocessorDefinitions>_DEBUG;_XBOX;XBOX;NOD3D;NONET;PLATFORM_XBOX360;IS_BIG_ENDIAN;ENABLE_WAD14;ENABLE_WAD16;ENABLE_WAD17;BZ_NO_STDIO;STB_VORBIS_BIG_ENDIAN;NO_FMIN;NO_FMAX;NO_ROUND;NO_LOG2;NO_LROUND;NO_ROUNDF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_XBOX;XBOX;NOD3D;NONET;PLATFORM_XBOX360;IS_BIG_ENDIAN;ENABLE_WAD14;ENABLE_WAD16;ENABLE_WAD17;BZ_NO_STDIO;STB_VORBIS_BIG_ENDIAN;NO_STRCASECMP;NO_FMIN;NO_FMAX;NO_ROUND;NO_LOG2;NO_LROUND;NO_ROUNDF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>src\xbox360-xdk;src;src\image;vendor\stb\ds;vendor\stb\image;vendor\stb\vorbis;vendor\bzip2;vendor\base64;vendor\md5;vendor\sha1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/MP %(AdditionalOptions)</AdditionalOptions>
       <ForcedIncludeFiles>compat_msvc.h</ForcedIncludeFiles>
@@ -90,7 +90,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
-      <PreprocessorDefinitions>NDEBUG;_XBOX;XBOX;NOD3D;NONET;PLATFORM_XBOX360;IS_BIG_ENDIAN;ENABLE_WAD14;ENABLE_WAD16;ENABLE_WAD17;BZ_NO_STDIO;STB_VORBIS_BIG_ENDIAN;NO_FMIN;NO_FMAX;NO_ROUND;NO_LOG2;NO_LROUND;NO_ROUNDF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_XBOX;XBOX;NOD3D;NONET;PLATFORM_XBOX360;IS_BIG_ENDIAN;ENABLE_WAD14;ENABLE_WAD16;ENABLE_WAD17;BZ_NO_STDIO;STB_VORBIS_BIG_ENDIAN;NO_STRCASECMP;NO_FMIN;NO_FMAX;NO_ROUND;NO_LOG2;NO_LROUND;NO_ROUNDF;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>src\xbox360-xdk;src;src\image;vendor\stb\ds;vendor\stb\image;vendor\stb\vorbis;vendor\bzip2;vendor\base64;vendor\md5;vendor\sha1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/MP %(AdditionalOptions)</AdditionalOptions>
       <ForcedIncludeFiles>compat_msvc.h</ForcedIncludeFiles>

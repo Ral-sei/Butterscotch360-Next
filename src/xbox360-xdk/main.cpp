@@ -69,7 +69,6 @@ static DataWin* loadDataWin(const char* path, XdkUi* ui) {
     options.skipLoadingPreciseMasksForNonPreciseSprites = true;
     options.lazyLoadRooms = true;
     options.lazyLoadTextures = true;
-    options.lazyLoadAudio = true;
     options.progressCallback = XdkUi_dataWinProgress;
     options.progressCallbackUserData = ui;
     return DataWin_parse(path, options);
