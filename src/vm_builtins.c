@@ -287,6 +287,8 @@ static const BuiltinVarEntry BUILTIN_VAR_TABLE[] = {
     { "bbox_left", BUILTIN_VAR_BBOX_LEFT },
     { "bbox_right", BUILTIN_VAR_BBOX_RIGHT },
     { "bbox_top", BUILTIN_VAR_BBOX_TOP },
+    { "browser_height", BUILTIN_VAR_BROWSER_HEIGHT },
+    { "browser_width", BUILTIN_VAR_BROWSER_WIDTH },
     { "buffer_bool", BUILTIN_VAR_BUFFER_BOOL },
     { "buffer_f16", BUILTIN_VAR_BUFFER_F16 },
     { "buffer_f32", BUILTIN_VAR_BUFFER_F32 },
@@ -772,6 +774,26 @@ RValue VMBuiltins_getVariable(VMContext* ctx, Instance* inst, int16_t builtinVar
             if (!bbox.valid) return RValue_makeReal(inst->y);
             // In compatibility mode the bbox is inclusive while our bbox is exclusive
             return RValue_makeReal(runner->collisionCompatibilityMode ? bbox.bottom - 1 : bbox.bottom);
+        }
+        case BUILTIN_VAR_BROWSER_WIDTH: {
+            if (runner != nullptr && runner->getWindowSize != nullptr) {
+                int32_t w = 0;
+                int32_t h = 0;
+                if (runner->getWindowSize(&w, &h)) {
+                    return RValue_makeReal((GMLReal) w);
+                }
+            }
+            return RValue_makeReal((GMLReal) ctx->dataWin->gen8.defaultWindowWidth);
+        }
+        case BUILTIN_VAR_BROWSER_HEIGHT: {
+            if (runner != nullptr && runner->getWindowSize != nullptr) {
+                int32_t w = 0;
+                int32_t h = 0;
+                if (runner->getWindowSize(&w, &h)) {
+                    return RValue_makeReal((GMLReal) h);
+                }
+            }
+            return RValue_makeReal((GMLReal) ctx->dataWin->gen8.defaultWindowHeight);
         }
         case BUILTIN_VAR_VISIBLE:
             if (inst == nullptr) break;
@@ -15881,7 +15903,7 @@ static RValue fontAddSpriteImpl(VMContext* ctx, int32_t spriteIndex, uint16_t* c
     Font* font = &dw->font.fonts[newFontIndex];
     font->name = "sprite_font";
     font->displayName = "sprite_font";
-    font->emSize = (maxHeight > 0) ? maxHeight : sprite->height;
+    font->emSize = (float)((maxHeight > 0) ? maxHeight : sprite->height);
     font->bold = false;
     font->italic = false;
     font->rangeStart = 0;
@@ -15917,6 +15939,18 @@ static RValue builtin_font_get_name(VMContext* ctx, RValue* args, int32_t argCou
     return RValue_makeString(ctx->dataWin->font.fonts[fontIndex].name);
 }
 
+static RValue builtin_font_get_size(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) {
+        fprintf(stderr, "[font_get_size] Expected 1 argument, got 0");
+        return RValue_makeUndefined();
+    }
+
+    int32_t fontIndex = RValue_toInt32(args[0]);
+    if (0 > fontIndex || (uint32_t) fontIndex >= ctx->dataWin->font.count) return RValue_makeUndefined();
+    float size = ctx->dataWin->font.fonts[fontIndex].emSize;
+    return RValue_makeReal(size);
+}
+
 // font_get_info(font): returns a struct with the font information.
 static RValue builtin_font_get_info(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
@@ -15926,7 +15960,7 @@ static RValue builtin_font_get_info(VMContext* ctx, RValue* args, int32_t argCou
 
     Instance* ret = Runner_createStruct(ctx->runner);
     VM_structSetAndFreeVal(ctx, ret, "spriteIndex", RValue_makeInt32(font->isSpriteFont ? font->spriteIndex : -1), -1);
-    VM_structSetAndFreeVal(ctx, ret, "size", RValue_makeInt32((int32_t) font->emSize), -1);
+    VM_structSetAndFreeVal(ctx, ret, "size", RValue_makeReal(font->emSize), -1);
     VM_structSetAndFreeVal(ctx, ret, "ascender", RValue_makeInt32((int32_t) font->ascender), -1);
     VM_structSetAndFreeVal(ctx, ret, "ascenderOffset", RValue_makeInt32(font->ascenderOffset), -1);
     VM_structSetAndFreeVal(ctx, ret, "sdfSpread", RValue_makeInt32((int32_t) font->sdfSpread), -1);
@@ -17491,6 +17525,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "font_add_sprite", builtin_font_add_sprite);
     VM_registerBuiltin(ctx, "font_add_sprite_ext", builtin_font_add_sprite_ext);
     VM_registerBuiltin(ctx, "font_get_name", builtin_font_get_name);
+    VM_registerBuiltin(ctx, "font_get_size", builtin_font_get_size);
     VM_registerBuiltin(ctx, "font_get_info", builtin_font_get_info);
     VM_registerBuiltin(ctx, "object_exists", builtin_object_exists);
     VM_registerBuiltin(ctx, "object_get_name", builtin_object_get_name);
