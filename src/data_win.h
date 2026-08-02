@@ -873,7 +873,7 @@ typedef struct {
     bool present;
     uint32_t dataOffset; // absolute file offset to audio data
     uint32_t dataSize;   // length of audio data
-    uint8_t* data;       // owned copy of audio data
+    uint8_t* data;       // owned copy of audio data, or nullptr when lazily loaded
 } AudioEntry;
 
 typedef struct {
@@ -929,8 +929,8 @@ struct DataWin {
 
     DetectedFormat detectedFormat;
 
-    // Held open across the whole session when DataWinParserOptions.lazyLoadRooms is true.
-    // Used by DataWin_loadRoomPayload to satisfy on-demand room payload reads.
+    // Held open across the whole session when any lazy loading option is true.
+    // Used to satisfy on-demand room, texture, and audio reads.
     // nullptr when lazy loading is disabled. Closed by DataWin_free.
     FILE* lazyLoadFile;
     char* lazyLoadFilePath; // owned strdup of the original file path, for diagnostics

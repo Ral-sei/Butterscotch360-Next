@@ -155,200 +155,33 @@ static void setSurfaceViewport(D3D9Renderer* dr, int32_t width, int32_t height) 
     Dev(dr)->SetViewport(&vp);
 }
 
-static const int32_t SURFACE_TILE_WIDTH = 1280;
-static const int32_t SURFACE_TILE_HEIGHT = 704;
-static const int32_t MAX_SURFACE_TILES = 32;
-
-static bool ensureSurfaceTileTarget(D3D9Renderer* dr) {
-    if (dr->surfaceTileTarget) return true;
-
-    D3DSURFACE_PARAMETERS parameters;
-    memset(&parameters, 0, sizeof(parameters));
-    parameters.Base = 0;
-    IDirect3DSurface9* target = NULL;
-    HRESULT hr = Dev(dr)->CreateRenderTarget(
-        SURFACE_TILE_WIDTH, SURFACE_TILE_HEIGHT, D3DFMT_A8R8G8B8,
-        D3DMULTISAMPLE_NONE, 0, FALSE, &target, &parameters
-    );
-    if (FAILED(hr) || !target) {
-        DbgPrint("BS: surface tile target create failed size=%dx%d hr=0x%08X\n",
-                 SURFACE_TILE_WIDTH, SURFACE_TILE_HEIGHT, (unsigned)hr);
-        return false;
-    }
-    dr->surfaceTileTarget = target;
-    DbgPrint("BS: surface tile target size=%dx%d base=0 mode=direct-small/predicated-large\n",
-             SURFACE_TILE_WIDTH, SURFACE_TILE_HEIGHT);
-    return true;
-}
-
-static bool blitSurfaceTextureToTileTarget(D3D9Renderer* dr, int32_t surfaceID,
-                                            IDirect3DTexture9* sourceTexture) {
-    IDirect3DDevice9* dev = Dev(dr);
-    int32_t width = dr->surfaceWidths[surfaceID];
-    int32_t height = dr->surfaceHeights[surfaceID];
-    SpriteVertex vertices[4];
-    DWORD white = D3DCOLOR_ARGB(255, 255, 255, 255);
-    setVertex(&vertices[0], 0.0f,         0.0f,          0.0f, 0.0f, white);
-    setVertex(&vertices[1], (float)width, 0.0f,          1.0f, 0.0f, white);
-    setVertex(&vertices[2], (float)width, (float)height, 1.0f, 1.0f, white);
-    setVertex(&vertices[3], 0.0f,         (float)height, 0.0f, 1.0f, white);
-
-    dev->SetVertexShader((IDirect3DVertexShader9*)dr->pVertexShader);
-    dev->SetPixelShader((IDirect3DPixelShader9*)dr->pPixelShader);
-    dev->SetVertexDeclaration((IDirect3DVertexDeclaration9*)dr->pVertexDecl);
-    dev->SetRenderState(D3DRS_VIEWPORTENABLE, FALSE);
-    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-    dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-    dev->SetRenderState(D3DRS_COLORWRITEENABLE,
-                        D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
-                        D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
-    dev->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-    dev->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-    dev->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_POINT);
-    dev->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-    dev->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-    dev->SetTexture(0, (IDirect3DBaseTexture9*)sourceTexture);
-    dev->DrawPrimitiveUP(D3DPT_QUADLIST, 1, vertices, sizeof(SpriteVertex));
-    dev->SetTexture(0, NULL);
-    D3D9Renderer_applyGpuState(dr);
-    bindCurrentShaders(dr);
-    return true;
-}
-
-static bool beginSurfaceRendering(D3D9Renderer* dr, int32_t surfaceID) {
-    if (!ensureSurfaceTileTarget(dr)) return false;
-
-    int32_t width = dr->surfaceWidths[surfaceID];
-    int32_t height = dr->surfaceHeights[surfaceID];
-    D3DRECT tiles[MAX_SURFACE_TILES];
-    int32_t tileCount = 0;
-    for (int32_t y = 0; y < height; y += SURFACE_TILE_HEIGHT) {
-        for (int32_t x = 0; x < width; x += SURFACE_TILE_WIDTH) {
-            if (tileCount >= MAX_SURFACE_TILES) {
-                DbgPrint("BS: surface tiling failed id=%d size=%dx%d tiles>%d\n",
-                         surfaceID, width, height, MAX_SURFACE_TILES);
-                return false;
-            }
-            D3DRECT* tile = &tiles[tileCount++];
-            tile->x1 = x;
-            tile->y1 = y;
-            tile->x2 = x + SURFACE_TILE_WIDTH < width ? x + SURFACE_TILE_WIDTH : width;
-            tile->y2 = y + SURFACE_TILE_HEIGHT < height ? y + SURFACE_TILE_HEIGHT : height;
-        }
-    }
-
-    bool needsTiling = tileCount > 1;
-    IDirect3DTexture9* restoreTexture = NULL;
-    if (needsTiling && dr->surfaceResolved[surfaceID]) {
-        if (!dr->surfaceResolveTextures[surfaceID]) {
-            IDirect3DTexture9* resolveTexture = NULL;
-            HRESULT createHr = Dev(dr)->CreateTexture(
-                width, height, 1, 0, D3DFMT_A8R8G8B8,
-                D3DPOOL_DEFAULT, &resolveTexture, NULL
-            );
-            if (FAILED(createHr) || !resolveTexture) {
-                DbgPrint("BS: surface ping-pong texture create failed id=%d size=%dx%d hr=0x%08X\n",
-                         surfaceID, width, height, (unsigned)createHr);
-                return false;
-            }
-            dr->surfaceResolveTextures[surfaceID] = resolveTexture;
-        }
-
-        // EndTiling replays this pass once per tile. Sampling from its resolve
-        // destination creates a read/write feedback loop that can hang Xenos.
-        // Keep the previous image as the source and resolve into the other texture.
-        restoreTexture = (IDirect3DTexture9*)dr->surfaceTextures[surfaceID];
-        dr->surfaceTextures[surfaceID] = dr->surfaceResolveTextures[surfaceID];
-        dr->surfaceResolveTextures[surfaceID] = restoreTexture;
-    }
-
-    IDirect3DDevice9* dev = Dev(dr);
-    dev->SetTexture(0, NULL);
-    HRESULT hr = dev->SetRenderTarget(0, (IDirect3DSurface9*)dr->surfaceTileTarget);
-    if (FAILED(hr)) {
-        if (restoreTexture) {
-            dr->surfaceResolveTextures[surfaceID] = dr->surfaceTextures[surfaceID];
-            dr->surfaceTextures[surfaceID] = restoreTexture;
-        }
-        return false;
-    }
-    setSurfaceViewport(dr, width, height);
-    D3DVECTOR4 clearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (needsTiling) {
-        static int32_t lastTiledWidth = 0;
-        static int32_t lastTiledHeight = 0;
-        if (width != lastTiledWidth || height != lastTiledHeight) {
-            DbgPrint("BS: surface predicated tiling id=%d size=%dx%d tiles=%d\n",
-                     surfaceID, width, height, tileCount);
-            lastTiledWidth = width;
-            lastTiledHeight = height;
-        }
-        dev->BeginTiling(0, (DWORD)tileCount, tiles, &clearColor, 1.0f, 0);
-    } else {
-        dev->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
-    }
-    dr->surfaceTilingActive = needsTiling;
-    dr->currentSurfaceTarget = surfaceID;
-
-    IDirect3DTexture9* contentTexture = restoreTexture
-        ? restoreTexture
-        : (IDirect3DTexture9*)dr->surfaceTextures[surfaceID];
-    if (dr->surfaceResolved[surfaceID] &&
-        !blitSurfaceTextureToTileTarget(dr, surfaceID, contentTexture)) return false;
-    dr->currentTextureIndex = -1;
-    return true;
-}
-
 static bool resolveSurface(D3D9Renderer* dr, int32_t surfaceID) {
     if (surfaceID < 0 || surfaceID >= D3D9_MAX_SURFACES ||
-        !dr->surfaceActive[surfaceID]) return false;
-    if (dr->currentSurfaceTarget != surfaceID) return dr->surfaceResolved[surfaceID];
-    if (!dr->surfaceTilingActive && dr->surfaceResolved[surfaceID]) return true;
-    if (!dr->surfaceTilingActive &&
-        (dr->surfaceWidths[surfaceID] > SURFACE_TILE_WIDTH ||
-         dr->surfaceHeights[surfaceID] > SURFACE_TILE_HEIGHT)) {
-        DbgPrint("BS: surface resolve rejected inactive tiling id=%d size=%dx%d\n",
-                 surfaceID, dr->surfaceWidths[surfaceID], dr->surfaceHeights[surfaceID]);
-        return false;
+        !dr->surfaceActive[surfaceID] || dr->surfaceResolved[surfaceID]) {
+        return surfaceID < 0 ||
+               (surfaceID < D3D9_MAX_SURFACES && dr->surfaceActive[surfaceID]);
     }
+    if (!dr->surfaceNeedsResolve[surfaceID]) {
+        dr->surfaceResolved[surfaceID] = true;
+        return true;
+    }
+    if (dr->currentSurfaceTarget != surfaceID || !dr->surfaceTextures[surfaceID]) return false;
+
     flushBatch(dr);
     Dev(dr)->SetTexture(0, NULL);
-    D3DVECTOR4 clearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-    bool wasTiling = dr->surfaceTilingActive;
-    HRESULT hr;
-    if (wasTiling) {
-        hr = Dev(dr)->EndTiling(
-            D3DRESOLVE_RENDERTARGET0 | D3DRESOLVE_ALLFRAGMENTS |
-                D3DRESOLVE_CLEARRENDERTARGET,
-            NULL, (IDirect3DBaseTexture9*)dr->surfaceTextures[surfaceID],
-            &clearColor, 1.0f, 0, NULL
-        );
-    } else {
-        D3DRECT resolveRect;
-        resolveRect.x1 = 0;
-        resolveRect.y1 = 0;
-        resolveRect.x2 = dr->surfaceWidths[surfaceID];
-        resolveRect.y2 = dr->surfaceHeights[surfaceID];
-        Dev(dr)->Resolve(
-            D3DRESOLVE_RENDERTARGET0, &resolveRect,
-            (IDirect3DBaseTexture9*)dr->surfaceTextures[surfaceID],
-            NULL, 0, 0, &clearColor, 1.0f, 0, NULL
-        );
-        hr = S_OK;
-    }
-    dr->surfaceTilingActive = false;
-    dr->surfaceResolved[surfaceID] = SUCCEEDED(hr);
+    Dev(dr)->Resolve(
+        D3DRESOLVE_RENDERTARGET0 | D3DRESOLVE_ALLFRAGMENTS,
+        NULL, (IDirect3DBaseTexture9*)dr->surfaceTextures[surfaceID],
+        NULL, 0, 0, NULL, 0.0f, 0, NULL
+    );
+    dr->surfaceResolved[surfaceID] = true;
     dr->currentTextureIndex = -1;
-    if (FAILED(hr)) {
-        DbgPrint("BS: surface %s failed id=%d size=%dx%d hr=0x%08X\n",
-                 wasTiling ? "EndTiling" : "Resolve",
-                 surfaceID, dr->surfaceWidths[surfaceID],
-                 dr->surfaceHeights[surfaceID], (unsigned)hr);
-    }
-    return SUCCEEDED(hr);
+    return true;
 }
 
 static bool bindRenderTarget(D3D9Renderer* dr, int32_t surfaceID) {
+    IDirect3DDevice9* dev = Dev(dr);
+    IDirect3DSurface9* target = NULL;
     int32_t targetW = dr->screenW;
     int32_t targetH = dr->screenH;
 
@@ -360,13 +193,24 @@ static bool bindRenderTarget(D3D9Renderer* dr, int32_t surfaceID) {
         !resolveSurface(dr, dr->currentSurfaceTarget)) return false;
 
     if (surfaceID < 0) {
-        if (!bindHostFramebuffer(dr)) return false;
+        HRESULT hr = dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &target);
+        if (FAILED(hr) || !target) return false;
+        hr = dev->SetRenderTarget(0, target);
+        target->Release();
+        if (FAILED(hr)) return false;
         dr->currentSurfaceTarget = -1;
     } else {
         if (surfaceID >= D3D9_MAX_SURFACES || !dr->surfaceActive[surfaceID]) return false;
+        target = (IDirect3DSurface9*)dr->surfaceSurfaces[surfaceID];
+        if (!target) return false;
+        for (int32_t stage = 0; stage < MAX_TEXTURE_STAGES; stage++) {
+            dev->SetTexture((DWORD)stage, NULL);
+        }
+        if (FAILED(dev->SetRenderTarget(0, target))) return false;
         targetW = dr->surfaceWidths[surfaceID];
         targetH = dr->surfaceHeights[surfaceID];
-        if (!beginSurfaceRendering(dr, surfaceID)) return false;
+        dr->currentSurfaceTarget = surfaceID;
+        dr->surfaceResolved[surfaceID] = false;
     }
 
     setSurfaceViewport(dr, targetW, targetH);
@@ -377,12 +221,8 @@ static bool bindRenderTarget(D3D9Renderer* dr, int32_t surfaceID) {
 static bool ensureSurfaceResolved(D3D9Renderer* dr, int32_t surfaceID) {
     if (surfaceID < 0 || surfaceID >= D3D9_MAX_SURFACES ||
         !dr->surfaceActive[surfaceID]) return false;
-    if (dr->currentSurfaceTarget == surfaceID) {
-        if (dr->surfaceResolved[surfaceID]) return true;
-        if (!resolveSurface(dr, surfaceID)) return false;
-        return beginSurfaceRendering(dr, surfaceID);
-    }
     if (dr->surfaceResolved[surfaceID]) return true;
+    if (dr->currentSurfaceTarget == surfaceID) return resolveSurface(dr, surfaceID);
 
     int32_t previousTarget = dr->currentSurfaceTarget;
     if (!bindRenderTarget(dr, surfaceID)) return false;
@@ -391,25 +231,13 @@ static bool ensureSurfaceResolved(D3D9Renderer* dr, int32_t surfaceID) {
 }
 
 static int32_t suspendSurfaceTilingForResourceAccess(D3D9Renderer* dr) {
-    if (!dr->surfaceTilingActive || dr->currentSurfaceTarget < 0) return -1;
-    int32_t surfaceID = dr->currentSurfaceTarget;
-    static uint32_t suspendCount = 0;
-    suspendCount++;
-    if (suspendCount <= 16 || (suspendCount % 128) == 0) {
-        DbgPrint("BS: surface tiling suspend for resource id=%d size=%dx%d count=%u\n",
-                 surfaceID, dr->surfaceWidths[surfaceID], dr->surfaceHeights[surfaceID],
-                 (unsigned)suspendCount);
-    }
-    return resolveSurface(dr, surfaceID) ? surfaceID : -1;
+    (void)dr;
+    return -1;
 }
 
 static void resumeSurfaceTilingAfterResourceAccess(D3D9Renderer* dr, int32_t surfaceID) {
-    if (surfaceID < 0 || dr->currentSurfaceTarget != surfaceID ||
-        !dr->surfaceActive[surfaceID] || dr->surfaceTilingActive) return;
-    if (!beginSurfaceRendering(dr, surfaceID)) {
-        DbgPrint("BS: surface tiling resume failed id=%d size=%dx%d\n",
-                 surfaceID, dr->surfaceWidths[surfaceID], dr->surfaceHeights[surfaceID]);
-    }
+    (void)dr;
+    (void)surfaceID;
 }
 
 static inline void markCurrentSurfaceDirty(D3D9Renderer* dr) {
@@ -974,14 +802,13 @@ static void d3d9Init(Renderer* renderer, DataWin* dataWin) {
 
     for (int32_t i = 0; i < D3D9_MAX_SURFACES; i++) {
         dr->surfaceTextures[i] = NULL;
-        dr->surfaceResolveTextures[i] = NULL;
+        dr->surfaceSurfaces[i] = NULL;
         dr->surfaceWidths[i] = 0;
         dr->surfaceHeights[i] = 0;
         dr->surfaceActive[i] = false;
         dr->surfaceResolved[i] = false;
+        dr->surfaceNeedsResolve[i] = false;
     }
-    dr->surfaceTileTarget = NULL;
-    dr->surfaceTilingActive = false;
     dr->spareSurfaceTexture = NULL;
     dr->spareSurfaceTextureW = 0;
     dr->spareSurfaceTextureH = 0;
@@ -1011,9 +838,7 @@ static void d3d9Destroy(Renderer* renderer) {
     D3D9Renderer* dr = (D3D9Renderer*)renderer;
 
     flushBatch(dr);
-    if (dr->currentSurfaceTarget >= 0 && dr->surfaceTilingActive) {
-        resolveSurface(dr, dr->currentSurfaceTarget);
-    }
+    if (dr->currentSurfaceTarget >= 0) resolveSurface(dr, dr->currentSurfaceTarget);
     bindHostFramebuffer(dr);
     Dev(dr)->SetTexture(0, NULL);
     Dev(dr)->SetVertexShader(NULL);
@@ -1059,12 +884,7 @@ static void d3d9Destroy(Renderer* renderer) {
     free(dr->shaderUniformBindings);
     for (int32_t i = 0; i < D3D9_MAX_SURFACES; i++) {
         if (dr->surfaceTextures[i]) ((IDirect3DTexture9*)dr->surfaceTextures[i])->Release();
-        if (dr->surfaceResolveTextures[i]) {
-            ((IDirect3DTexture9*)dr->surfaceResolveTextures[i])->Release();
-        }
-    }
-    if (dr->surfaceTileTarget) {
-        ((IDirect3DSurface9*)dr->surfaceTileTarget)->Release();
+        if (dr->surfaceSurfaces[i]) ((IDirect3DSurface9*)dr->surfaceSurfaces[i])->Release();
     }
     if (dr->spareSurfaceTexture) {
         ((IDirect3DTexture9*)dr->spareSurfaceTexture)->Release();
@@ -2180,7 +2000,8 @@ void D3D9Renderer_applyGpuState(D3D9Renderer* dr) {
 
 // ===[ Surface Functions ]===
 
-static int32_t d3d9CreateSurfaceInternal(Renderer* renderer, int32_t width, int32_t height) {
+static int32_t d3d9CreateSurfaceInternal(Renderer* renderer, int32_t width, int32_t height,
+                                         bool needsResolve) {
     D3D9Renderer* dr = (D3D9Renderer*)renderer;
     IDirect3DDevice9* dev = Dev(dr);
     flushBatch(dr);
@@ -2204,7 +2025,7 @@ static int32_t d3d9CreateSurfaceInternal(Renderer* renderer, int32_t width, int3
     int32_t suspendedSurface = suspendSurfaceTilingForResourceAccess(dr);
     IDirect3DTexture9* tex = NULL;
     HRESULT hr = S_OK;
-    if (dr->spareSurfaceTexture &&
+    if (!needsResolve && dr->spareSurfaceTexture &&
         dr->spareSurfaceTextureW == width && dr->spareSurfaceTextureH == height) {
         tex = (IDirect3DTexture9*)dr->spareSurfaceTexture;
         dr->spareSurfaceTexture = NULL;
@@ -2217,7 +2038,8 @@ static int32_t d3d9CreateSurfaceInternal(Renderer* renderer, int32_t width, int3
             dr->spareSurfaceTextureW = 0;
             dr->spareSurfaceTextureH = 0;
         }
-        hr = dev->CreateTexture(width, height, 1, 0,
+        DWORD textureUsage = needsResolve ? 0 : D3DUSAGE_RENDERTARGET;
+        hr = dev->CreateTexture(width, height, 1, textureUsage,
                                 D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &tex, NULL);
     }
     if (FAILED(hr) || !tex) {
@@ -2227,16 +2049,32 @@ static int32_t d3d9CreateSurfaceInternal(Renderer* renderer, int32_t width, int3
         return -1;
     }
 
+    IDirect3DSurface9* surface = NULL;
+    if (needsResolve) {
+        hr = dev->CreateRenderTarget(width, height, D3DFMT_A8R8G8B8,
+                                     D3DMULTISAMPLE_NONE, 0, FALSE, &surface, NULL);
+    } else {
+        hr = tex->GetSurfaceLevel(0, &surface);
+    }
+    if (FAILED(hr) || !surface) {
+        DbgPrint("BS: surface target create failed slot=%d size=%dx%d resolve=%d hr=0x%08X\n",
+                 slot, width, height, needsResolve ? 1 : 0, (unsigned)hr);
+        tex->Release();
+        resumeSurfaceTilingAfterResourceAccess(dr, suspendedSurface);
+        return -1;
+    }
+
     dr->surfaceTextures[slot] = tex;
-    dr->surfaceResolveTextures[slot] = NULL;
+    dr->surfaceSurfaces[slot] = surface;
     dr->surfaceWidths[slot] = width;
     dr->surfaceHeights[slot] = height;
     dr->surfaceActive[slot] = true;
     dr->surfaceResolved[slot] = false;
+    dr->surfaceNeedsResolve[slot] = needsResolve;
 
     if (shouldLogSurfaceLifecycle()) {
-        DbgPrint("BS: surface create id=%d size=%dx%d active=%d room=%d\n",
-                 slot, width, height, activeSurfaceCount(dr),
+        DbgPrint("BS: surface create id=%d size=%dx%d resolve=%d active=%d room=%d\n",
+                 slot, width, height, needsResolve ? 1 : 0, activeSurfaceCount(dr),
                  renderer->runner ? renderer->runner->currentRoomIndex : -1);
     }
 
@@ -2245,7 +2083,7 @@ static int32_t d3d9CreateSurfaceInternal(Renderer* renderer, int32_t width, int3
 }
 
 static int32_t d3d9CreateSurface(Renderer* renderer, int32_t width, int32_t height) {
-    return d3d9CreateSurfaceInternal(renderer, width, height);
+    return d3d9CreateSurfaceInternal(renderer, width, height, false);
 }
 
 static bool d3d9SurfaceExists(Renderer* renderer, int32_t surfaceID) {
@@ -2418,10 +2256,24 @@ static void d3d9SurfaceResize(Renderer* renderer, int32_t surfaceID, int32_t wid
     if (dr->surfaceWidths[surfaceID] == width && dr->surfaceHeights[surfaceID] == height) return;
 
     int32_t suspendedSurface = suspendSurfaceTilingForResourceAccess(dr);
+    bool needsResolve = dr->surfaceNeedsResolve[surfaceID];
     IDirect3DTexture9* tex = NULL;
-    HRESULT hr = dev->CreateTexture(width, height, 1, 0,
+    DWORD textureUsage = needsResolve ? 0 : D3DUSAGE_RENDERTARGET;
+    HRESULT hr = dev->CreateTexture(width, height, 1, textureUsage,
                                      D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &tex, NULL);
     if (FAILED(hr) || !tex) {
+        resumeSurfaceTilingAfterResourceAccess(dr, suspendedSurface);
+        return;
+    }
+    IDirect3DSurface9* surface = NULL;
+    if (needsResolve) {
+        hr = dev->CreateRenderTarget(width, height, D3DFMT_A8R8G8B8,
+                                     D3DMULTISAMPLE_NONE, 0, FALSE, &surface, NULL);
+    } else {
+        hr = tex->GetSurfaceLevel(0, &surface);
+    }
+    if (FAILED(hr) || !surface) {
+        tex->Release();
         resumeSurfaceTilingAfterResourceAccess(dr, suspendedSurface);
         return;
     }
@@ -2430,16 +2282,15 @@ static void d3d9SurfaceResize(Renderer* renderer, int32_t surfaceID, int32_t wid
     if (wasCurrentTarget) bindRenderTarget(dr, RENDER_TARGET_HOST_FRAMEBUFFER);
 
     IDirect3DTexture9* oldTexture = (IDirect3DTexture9*)dr->surfaceTextures[surfaceID];
-    IDirect3DTexture9* oldResolveTexture =
-        (IDirect3DTexture9*)dr->surfaceResolveTextures[surfaceID];
+    IDirect3DSurface9* oldSurface = (IDirect3DSurface9*)dr->surfaceSurfaces[surfaceID];
     dr->surfaceTextures[surfaceID] = tex;
-    dr->surfaceResolveTextures[surfaceID] = NULL;
+    dr->surfaceSurfaces[surfaceID] = surface;
     dr->surfaceWidths[surfaceID] = width;
     dr->surfaceHeights[surfaceID] = height;
     dr->surfaceResolved[surfaceID] = false;
 
     if (oldTexture) oldTexture->Release();
-    if (oldResolveTexture) oldResolveTexture->Release();
+    if (oldSurface) oldSurface->Release();
     if (wasCurrentTarget) bindRenderTarget(dr, surfaceID);
     resumeSurfaceTilingAfterResourceAccess(dr, suspendedSurface);
 }
@@ -2460,23 +2311,28 @@ static void d3d9SurfaceFree(Renderer* renderer, int32_t surfaceID) {
         }
     }
 
-    if (dr->surfaceTextures[surfaceID]) {
-        if (dr->spareSurfaceTexture) {
-            ((IDirect3DTexture9*)dr->spareSurfaceTexture)->Release();
-        }
-        dr->spareSurfaceTexture = dr->surfaceTextures[surfaceID];
-        dr->spareSurfaceTextureW = dr->surfaceWidths[surfaceID];
-        dr->spareSurfaceTextureH = dr->surfaceHeights[surfaceID];
-        dr->surfaceTextures[surfaceID] = NULL;
+    if (dr->surfaceSurfaces[surfaceID]) {
+        ((IDirect3DSurface9*)dr->surfaceSurfaces[surfaceID])->Release();
+        dr->surfaceSurfaces[surfaceID] = NULL;
     }
-    if (dr->surfaceResolveTextures[surfaceID]) {
-        ((IDirect3DTexture9*)dr->surfaceResolveTextures[surfaceID])->Release();
-        dr->surfaceResolveTextures[surfaceID] = NULL;
+    if (dr->surfaceTextures[surfaceID]) {
+        if (!dr->surfaceNeedsResolve[surfaceID]) {
+            if (dr->spareSurfaceTexture) {
+                ((IDirect3DTexture9*)dr->spareSurfaceTexture)->Release();
+            }
+            dr->spareSurfaceTexture = dr->surfaceTextures[surfaceID];
+            dr->spareSurfaceTextureW = dr->surfaceWidths[surfaceID];
+            dr->spareSurfaceTextureH = dr->surfaceHeights[surfaceID];
+        } else {
+            ((IDirect3DTexture9*)dr->surfaceTextures[surfaceID])->Release();
+        }
+        dr->surfaceTextures[surfaceID] = NULL;
     }
     dr->surfaceWidths[surfaceID] = 0;
     dr->surfaceHeights[surfaceID] = 0;
     dr->surfaceActive[surfaceID] = false;
     dr->surfaceResolved[surfaceID] = false;
+    dr->surfaceNeedsResolve[surfaceID] = false;
     if (shouldLogSurfaceLifecycle()) {
         DbgPrint("BS: surface free id=%d active=%d room=%d\n",
                  surfaceID, activeSurfaceCount(dr),
@@ -2498,7 +2354,6 @@ static void d3d9SurfaceCopy(Renderer* renderer, int32_t destSurfaceID, int32_t d
     int32_t srcHFull = 0;
     bool srcOwned = false;
     bool dstOwned = false;
-    bool dstWasCurrent = false;
     HRESULT copyHr = E_FAIL;
     int32_t suspendedSurface = suspendSurfaceTilingForResourceAccess(dr);
 
@@ -2528,13 +2383,7 @@ static void d3d9SurfaceCopy(Renderer* renderer, int32_t destSurfaceID, int32_t d
         } else {
             if (destSurfaceID < 0 || destSurfaceID >= D3D9_MAX_SURFACES ||
                 !dr->surfaceActive[destSurfaceID]) break;
-            dstWasCurrent = dr->currentSurfaceTarget == destSurfaceID;
-            if (dstWasCurrent && !dr->surfaceResolved[destSurfaceID] &&
-                !resolveSurface(dr, destSurfaceID)) break;
-            HRESULT destinationHr = ((IDirect3DTexture9*)dr->surfaceTextures[destSurfaceID])
-                ->GetSurfaceLevel(0, &dstSurf);
-            if (FAILED(destinationHr) || !dstSurf) break;
-            dstOwned = true;
+            dstSurf = (IDirect3DSurface9*)dr->surfaceSurfaces[destSurfaceID];
         }
 
         if (!srcSurf || !dstSurf) break;
@@ -2556,10 +2405,7 @@ static void d3d9SurfaceCopy(Renderer* renderer, int32_t destSurfaceID, int32_t d
     if (srcOwned) srcSurf->Release();
     if (dstOwned) dstSurf->Release();
     if (SUCCEEDED(copyHr) && destSurfaceID >= 0 && destSurfaceID < D3D9_MAX_SURFACES) {
-        dr->surfaceResolved[destSurfaceID] = true;
-        if (dstWasCurrent) {
-            beginSurfaceRendering(dr, destSurfaceID);
-        }
+        dr->surfaceResolved[destSurfaceID] = !dr->surfaceNeedsResolve[destSurfaceID];
     }
     resumeSurfaceTilingAfterResourceAccess(dr, suspendedSurface);
 }
@@ -2576,33 +2422,7 @@ static void d3d9ClearScreen(Renderer* renderer, uint32_t color, float alpha) {
     D3DCOLOR clearColor = D3DCOLOR_ARGB(a, r, g, b);
 
     markCurrentSurfaceDirty(dr);
-    if (!dr->surfaceTilingActive || dr->currentSurfaceTarget < 0) {
-        dev->Clear(0, NULL, D3DCLEAR_TARGET, clearColor, 1.0f, 0);
-        return;
-    }
-
-    int32_t width = dr->surfaceWidths[dr->currentSurfaceTarget];
-    int32_t height = dr->surfaceHeights[dr->currentSurfaceTarget];
-    SpriteVertex vertices[4];
-    setVertex(&vertices[0], 0.0f,         0.0f,          0.0f, 0.0f, clearColor);
-    setVertex(&vertices[1], (float)width, 0.0f,          1.0f, 0.0f, clearColor);
-    setVertex(&vertices[2], (float)width, (float)height, 1.0f, 1.0f, clearColor);
-    setVertex(&vertices[3], 0.0f,         (float)height, 0.0f, 1.0f, clearColor);
-
-    dev->SetVertexShader((IDirect3DVertexShader9*)dr->pVertexShader);
-    dev->SetPixelShader((IDirect3DPixelShader9*)dr->pPixelShader);
-    dev->SetVertexDeclaration((IDirect3DVertexDeclaration9*)dr->pVertexDecl);
-    dev->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-    dev->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-    dev->SetRenderState(D3DRS_COLORWRITEENABLE,
-                        D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
-                        D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
-    dev->SetTexture(0, (IDirect3DBaseTexture9*)dr->whiteTexture);
-    dev->DrawPrimitiveUP(D3DPT_QUADLIST, 1, vertices, sizeof(SpriteVertex));
-    dev->SetTexture(0, NULL);
-    D3D9Renderer_applyGpuState(dr);
-    bindCurrentShaders(dr);
-    dr->currentTextureIndex = -1;
+    dev->Clear(0, NULL, D3DCLEAR_TARGET, clearColor, 1.0f, 0);
 }
 
 static void d3d9ApplyGpuState(Renderer* renderer) {
@@ -2795,7 +2615,7 @@ static int32_t d3d9EnsureApplicationSurface(Renderer* renderer, int32_t width, i
     int32_t surfaceID = renderer->runner ? renderer->runner->applicationSurfaceId : APPLICATION_SURFACE_ID;
 
     if (surfaceID < 0 || surfaceID >= D3D9_MAX_SURFACES || !dr->surfaceActive[surfaceID]) {
-        surfaceID = d3d9CreateSurfaceInternal(renderer, width, height);
+        surfaceID = d3d9CreateSurfaceInternal(renderer, width, height, true);
         if (surfaceID >= 0 && renderer->runner) renderer->runner->applicationSurfaceId = surfaceID;
         return surfaceID;
     }

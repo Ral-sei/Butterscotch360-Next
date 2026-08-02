@@ -2876,9 +2876,15 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
             (options.parseAudo && memcmp(chunkName, "AUDO", 4) == 0) ||
             (memcmp(chunkName, "ACRV", 4) == 0);
 
-        // Bulk-read the chunk data into memory for fast parsing
+        // AUDO blobs are copied into individually owned buffers by parseAUDO,
+        // or read from the file on demand. Bulk-loading the whole AUDO chunk
+        // would duplicate its memory and can exceed console title memory.
         uint8_t* chunkBuffer = nullptr;
-        if (shouldParse && chunkLength > 0 && options.loadType == DATAWINLOADTYPE_LOAD_PER_CHUNK) {
+        bool bulkLoadChunk = shouldParse
+            && memcmp(chunkName, "AUDO", 4) != 0
+            && chunkLength > 0
+            && options.loadType == DATAWINLOADTYPE_LOAD_PER_CHUNK;
+        if (bulkLoadChunk) {
             chunkBuffer = (uint8_t *)malloc(chunkLength);
             if (chunkBuffer) {
                 size_t read = fread(chunkBuffer, 1, chunkLength, reader.file);
@@ -2983,7 +2989,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         }
     }
 
-    // If lazy-loading rooms, keep the file handle open for DataWin_loadRoomPayload, otherwise close it now
+    // Keep the file handle open while any resource type is loaded on demand.
     dw->lazyLoadRooms = options.lazyLoadRooms;
     dw->lazyLoadTextures = options.lazyLoadTextures;
     dw->lazyLoadAudio = options.lazyLoadAudio;
@@ -3214,7 +3220,7 @@ void DataWin_free(DataWin* dw) {
         free(dw->strgBuffer);
     free(dw->bytecodeBuffer);
 
-    // Close the lazy-load file handle (only open when lazyLoadRooms/lazyLoadTextures was enabled)
+    // Close the shared lazy-load file handle.
     if (dw->lazyLoadFile != nullptr) {
         fclose(dw->lazyLoadFile);
         dw->lazyLoadFile = nullptr;

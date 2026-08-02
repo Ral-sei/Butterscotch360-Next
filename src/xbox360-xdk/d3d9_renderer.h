@@ -85,14 +85,13 @@ typedef struct {
     uint32_t originalSpriteCount;
 
     // Surface data
-    void* surfaceTextures[D3D9_MAX_SURFACES];   // IDirect3DTexture9* resolved for sampling
-    void* surfaceResolveTextures[D3D9_MAX_SURFACES]; // ping-pong target for tiled content restore
+    void* surfaceTextures[D3D9_MAX_SURFACES];   // IDirect3DTexture9* sampled content
+    void* surfaceSurfaces[D3D9_MAX_SURFACES];   // IDirect3DSurface9* render target
     int32_t surfaceWidths[D3D9_MAX_SURFACES];
     int32_t surfaceHeights[D3D9_MAX_SURFACES];
     bool surfaceActive[D3D9_MAX_SURFACES];
     bool surfaceResolved[D3D9_MAX_SURFACES];
-    void* surfaceTileTarget;                    // IDirect3DSurface9*, fixed EDRAM alias
-    bool surfaceTilingActive;
+    bool surfaceNeedsResolve[D3D9_MAX_SURFACES];
     void* spareSurfaceTexture;                  // one recently freed IDirect3DTexture9*
     int32_t spareSurfaceTextureW;
     int32_t spareSurfaceTextureH;

@@ -16,8 +16,12 @@ It retains the official Butterscotch VM, WAD17 runner, and data parsing implemen
 
 ## Known Issues
 
-- Unable to play the full version of Pizza Tower properly.
+- The full version of Pizza Tower has visual glitches and stuttering.
+- Pizza Tower: Eggplant has no audio and suffers from stuttering.
 
+## Planned Improvements
+
+- Add texture compression to reduce memory usage and improve performance.
 
 ## Usage
 
