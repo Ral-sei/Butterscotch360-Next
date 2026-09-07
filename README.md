@@ -289,6 +289,11 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4026a7e3176" />
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/3702f061-01fe-4b04-9e6c-b6932e5c46e6" />
 
+## Notice
+
+I have gone to university and did not bring the Xbox 360 XDK with me, so I am
+temporarily unable to sync upstream or test bug fixes. Sorry for the
+inconvenience.
 
 ## Licensing
 

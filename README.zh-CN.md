@@ -288,6 +288,11 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4029e1e3176" />
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/3702a261-01fe-4b04-9e6c-b69336c2ce46" />
 
+## 说明
+
+因为我去上大学了，没有带上 Xbox 360 XDK，所以暂时无法同步上游和测试
+修复 bug，抱歉给大家带来不便。
+
 ## Licensing
 
 This project is licensed under **GPL-3.0-only**.
