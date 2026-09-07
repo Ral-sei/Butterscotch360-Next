@@ -6,6 +6,11 @@
 
 > Xbox 360 平台代码派生自 [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360)（作者 [ceilingtilefan](https://github.com/ceilingtilefan)），以 GPL-3.0-only 授权。完整授权信息见 [LICENSING.md](LICENSING.md)。
 
+## 说明
+
+因为我去上大学了，没有带上 Xbox 360 XDK，所以暂时无法同步上游和测试
+修复 bug，抱歉给大家带来不便。
+
 ## 简介
 
 这是 Butterscotch 的 Xbox 360 平台后端，基于官方 Butterscotch 主线迁移而来。

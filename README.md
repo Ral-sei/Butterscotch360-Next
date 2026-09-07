@@ -6,6 +6,12 @@
 
 > The Xbox 360 platform code is derived from [Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360) by [ceilingtilefan](https://github.com/ceilingtilefan), licensed under GPL-3.0-only. See [LICENSING.md](LICENSING.md) for full licensing information.
 
+## Notice
+
+I have gone to university and did not bring the Xbox 360 XDK with me, so I am
+temporarily unable to sync upstream or test bug fixes. Sorry for the
+inconvenience.
+
 ## Introduction
 
 This is the Xbox 360 platform backend for Butterscotch, migrated from the official Butterscotch mainline.
@@ -288,7 +294,6 @@ Here's a video :3 https://youtu.be/c9r79sQABYg
 
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/e8cd174c-5113-416b-9e3a-c4026a7e3176" />
 <img width="160" alt="image" src="https://github.com/user-attachments/assets/3702f061-01fe-4b04-9e6c-b6932e5c46e6" />
-
 
 ## Licensing
 

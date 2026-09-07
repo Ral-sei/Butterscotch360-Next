@@ -2194,9 +2194,16 @@ static void d3d9DrawSurface(Renderer* renderer, int32_t surfaceID, int32_t srcLe
     dev->SetTexture(0, (IDirect3DBaseTexture9*)surfTex);
 
     float u0 = (float)srcLeft / (float)texW;
-    float v0 = (float)srcTop / (float)texH;
     float u1 = (float)(srcLeft + srcWidth) / (float)texW;
-    float v1 = (float)(srcTop + srcHeight) / (float)texH;
+
+    // Resolve writes render-target rows using the Xenos render-target
+    // origin, which is opposite to GameMaker's top-left surface coordinates.
+    // Keep ordinary TXTR UVs top-down, but flip only surface samples (the
+    // OpenGL backend applies the same conversion in glDrawSurface).  Without
+    // this, surface-backed sprites (for example Muffet's pet battle assets)
+    // appear vertically inverted and can cover unrelated GUI elements.
+    float v0 = 1.0f - (float)srcTop / (float)texH;
+    float v1 = 1.0f - (float)(srcTop + srcHeight) / (float)texH;
 
     DWORD d3dColor = bgrToD3DColor(color, alpha);
 
