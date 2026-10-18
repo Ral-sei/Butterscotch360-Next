@@ -1,3 +1,86 @@
+<h1 align="center">🥧 Butterscotch 🥧 (Xbox 360 Port)</h1>
+
+## Introduction
+
+This is the Xbox 360 platform backend for Butterscotch, targeting the current official Butterscotch mainline.
+
+An earlier community port ([Butterscotch-360](https://github.com/ceilingtilefan/Butterscotch-360)) is unmaintained and its shared core predates WAD17 support. This repository instead adds a new Xbox 360 platform layer to the current official core; that platform layer is written from scratch for this repository and only uses the public Butterscotch interfaces.
+
+It retains the official Butterscotch VM, WAD17 runner, and data parsing implementations, while adding an Xbox 360 XDK backend (D3D9 / XAudio2 / XInput).
+
+## Known Issues
+
+- The full version of Pizza Tower has visual glitches and stuttering.
+- Bug reports and game compatibility reports are welcome — please [open an issue](https://github.com/Ral-sei/Butterscotch360-Next/issues).
+
+
+## Planned Improvements
+
+- Reduce memory usage further by streaming/stripping `data.win` texture data.
+- Implement a real save-data policy (XContent content packages, user selection, quota).
+
+## Requirements
+
+**This port requires [OXDK](https://github.com/MrMilenko/OXDK) for both building and deploying.** OXDK supplies the Xenon-patched Clang toolchain, the two-stage linker that packages the XEX2, and the XBDM tools used to transfer and launch the title.
+
+OXDK is not a replacement for the official Xbox 360 XDK: you must provide your own legally obtained Xbox 360 XDK installation. OXDK does not distribute it.
+
+- Host: Linux, macOS, or WSL2 for building (the build script is POSIX shell and does not run from a Windows command prompt).
+- `cmake`, `ninja`, `python3`, and `make` on `PATH`.
+- An OXDK checkout with a Xenon-ABI-patched LLVM (built with OXDK's `./oxdk build-llvm`; check it with `./oxdk doctor`).
+- An extracted Xbox 360 XDK, containing `lib/xbox/xboxkrnl.lib`.
+- The Windows Xbox 360 SDK `fxc.exe`, reachable from the build host. Xenon has no runtime HLSL compiler, so the renderer's shaders are precompiled during the build.
+
+See the [OXDK README](https://github.com/MrMilenko/OXDK) for the compiler build, XDK layout, and troubleshooting.
+
+## Building
+
+Run from the repository root, inside WSL/Linux/macOS:
+
+```sh
+export OXDK_DIR=/path/to/OXDK
+export OXDK_LLVM=/path/to/oxdk-llvm/build
+export XDK_DIR=/path/to/xdk360
+export XEDK='/path/to/Microsoft Xbox 360 SDK'   # contains bin/win32/fxc.exe
+
+sh scripts/xbox360/build.sh --frames=0 -j8
+```
+
+The result is `build/xbox360/default.xex` (an XEX2 title).
+
+`scripts/xbox360/build.sh` is the only build entry point. It validates the environment, drives the port-owned CMake toolchain (`scripts/xbox360/toolchain.cmake`), precompiles the renderer shaders with `fxc`, links through OXDK's `oxdklink`, and packages the XEX2. It never reads or modifies the upstream `CMakeLists.txt`.
+
+Useful options:
+
+| Option | Purpose |
+| --- | --- |
+| `--frames=N` | Run N frames and exit. `0` runs until the game exits (use it for interactive play). |
+| `--clean` | Delete the build directory first. |
+| `--minimal` | Build only the minimal toolchain probe. |
+| `--d3d-probe` | Build the standalone D3D9 device/texture probe instead of the runtime. |
+| `--renderer-selftest` | Run the surface/EDRAM/tiling self-test at startup. |
+| `--audio-selftest` | Run the XAudio2 self-test at startup. |
+| `--shader-selftest` | Build the offline-shader sidecar and run its self-test. |
+| `--debug-overlay` | Start with the debug stats overlay enabled (LB+RB cycles it). |
+
+Without `--frames`, the build defaults to 120 frames, so a test deployment exits by itself. Pass `--frames=0` for interactive play.
+
+For details, see [`scripts/xbox360/README.md`](scripts/xbox360/README.md), [`docs/xbox360-platform-plan.md`](docs/xbox360-platform-plan.md), and [`docs/xbox360-progress.md`](docs/xbox360-progress.md).
+
+## Usage
+
+1. Create a folder on your Xbox 360 (for example `Hdd1:\butterscotch\`) and place `default.xex` into it. OXDK's XBDM tools can transfer the XEX to the console.
+2. Copy `data.win` and the game's external audio files (for example `audiogroup1.dat` and `mus/*.ogg`) into the same folder.
+3. Launch the XEX via XEX Menu, Aurora, or Freestyle Dash.
+
+On the first boot the title generates `data.x360tex` next to `data.win`: static texture pages are decoded and DXT-compressed once, with a progress screen (`Hold START to skip`). Later boots reuse the sidecar. If the game directory is read-only (retail console), pre-generate the sidecar on a devkit and deploy it with the title.
+
+Optional `data.x360shaders` holds precompiled user shaders; without it, the game's custom shaders fall back to the built-in shader. Generate it with `scripts/xbox360/precompile_shaders.py` against the title's `data.win`.
+
+---
+
+# Original README
+
 <div align="center">
 <img width="256" height="256" alt="Butterscotch Logo" src="https://github.com/user-attachments/assets/ef8bdd5c-d407-4b3c-a4d5-07b25e8bbc70" />
 </div>
