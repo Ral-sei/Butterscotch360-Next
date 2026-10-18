@@ -65,7 +65,6 @@ Useful options:
 
 Without `--frames`, the build defaults to 120 frames, so a test deployment exits by itself. Pass `--frames=0` for interactive play.
 
-For details, see [`scripts/xbox360/README.md`](scripts/xbox360/README.md), [`docs/xbox360-platform-plan.md`](docs/xbox360-platform-plan.md), and [`docs/xbox360-progress.md`](docs/xbox360-progress.md).
 
 ## Usage
 
