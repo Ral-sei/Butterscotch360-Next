@@ -8,9 +8,7 @@
 
 ## Notice
 
-I have gone to university and did not bring the Xbox 360 XDK with me, so I am
-temporarily unable to sync upstream or test bug fixes. Sorry for the
-inconvenience.
+The platform layer has been refactored, please switch to the main branch
 
 ## Introduction
 
